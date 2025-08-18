@@ -35,6 +35,11 @@ public class DashboardController {
         }
     }
     
+    @GetMapping("/capacity")
+    public String capacityDashboard() {
+        return "capacity-dashboard";
+    }
+    
     @GetMapping("/api/summary")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> getSummary() {
