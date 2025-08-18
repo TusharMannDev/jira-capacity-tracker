@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Scrum Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .employee-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            transition: transform 0.2s;
+        }
+        .employee-card:hover {
+            transform: translateY(-2px);
+        }
+        .employee-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 15px 15px 0 0;
+        }
+        .employee-body {
+            padding: 20px;
+        }
+        .scrum-section {
+            margin-bottom: 20px;
+        }
+        .scrum-section h6 {
+            color: #495057;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 5px;
+            margin-bottom: 15px;
+        }
+        .issue-item {
+            border-left: 4px solid #007bff;
+            padding: 10px;
+            margin-bottom: 8px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            font-size: 0.9rem;
+        }
+        .issue-item.completed { border-left-color: #28a745; }
+        .issue-item.blocked { border-left-color: #dc3545; }
+        .issue-item.in-progress { border-left-color: #ffc107; }
+        .issue-item.todo { border-left-color: #6c757d; }
+        
+        .stats-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        .stats-number {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        .stats-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        .nav-tabs .nav-link {
+            border: none;
+            color: #6c757d;
+        }
+        .nav-tabs .nav-link.active {
+            color: #007bff;
+            border-bottom: 2px solid #007bff;
+        }
+        
+        .empty-state {
+            text-align: center;
+            color: #6c757d;
+            padding: 20px;
+        }
+        .empty-state i {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-users me-2"></i>
+                Daily Scrum Dashboard
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/dashboard">
+                    <i class="fas fa-chart-line me-1"></i>Main Dashboard
+                </a>
+                <span class="navbar-text">
+                    <i class="fas fa-calendar me-1"></i>
+                    <span th:text="${#dates.format(#dates.createNow(), 'dd MMM yyyy')}">Today</span>
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Header -->
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <h1 class="h3 mb-0">Daily Scrum Summary</h1>
+                <p class="text-muted">Team member updates for today's standup</p>
+            </div>
+            <div class="col-md-4 text-end">
+                <button class="btn btn-outline-primary" onclick="refreshScrum()">
+                    <i class="fas fa-sync-alt me-1"></i> Refresh
+                </button>
+                <button class="btn btn-success" onclick="syncFromJira()">
+                    <i class="fas fa-download me-1"></i> Sync
+                </button>
+            </div>
+        </div>
+
+        <!-- Team Overview Stats -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="stats-number" th:text="${summary.totalEmployees}">0</div>
+                    <div class="stats-label">Team Members</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                    <div class="stats-number" th:text="${summary.employees?.values()?.stream()?.mapToInt(e -> e.get('totalIssues'))?.sum() ?: 0}">0</div>
+                    <div class="stats-label">Total Issues</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                    <div class="stats-number" th:text="${summary.employees?.values()?.stream()?.mapToInt(e -> e.get('completedIssues'))?.sum() ?: 0}">0</div>
+                    <div class="stats-label">Completed Today</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                    <div class="stats-number" th:text="${summary.employees?.values()?.stream()?.mapToInt(e -> e.get('completedStoryPoints'))?.sum() ?: 0}">0</div>
+                    <div class="stats-label">Story Points Done</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Employee Cards -->
+        <div class="row" th:if="${summary.employees}">
+            <div class="col-12" th:each="employeeEntry : ${summary.employees}">
+                <div class="employee-card">
+                    <div class="employee-header">
+                        <div class="row align-items-center">
+                            <div class="col-md-6">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-user me-2"></i>
+                                    <span th:text="${employeeEntry.key}">Employee Name</span>
+                                </h5>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <a th:href="@{'/scrum/' + ${employeeEntry.key}}" class="btn btn-sm btn-outline-light">
+                                    <i class="fas fa-external-link-alt me-1"></i>View Details
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="employee-body">
+                        <div class="row">
+                            <!-- Quick Stats -->
+                            <div class="col-md-3">
+                                <div class="row">
+                                    <div class="col-6">
+                                        <div class="text-center">
+                                            <h4 class="text-primary" th:text="${employeeEntry.value.totalIssues}">0</h4>
+                                            <small class="text-muted">Total</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="text-center">
+                                            <h4 class="text-success" th:text="${employeeEntry.value.completedIssues}">0</h4>
+                                            <small class="text-muted">Done</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mt-2">
+                                    <div class="progress" style="height: 5px;">
+                                        <div class="progress-bar bg-success" 
+                                             th:style="'width: ' + ${employeeEntry.value.totalIssues > 0 ? (employeeEntry.value.completedIssues * 100 / employeeEntry.value.totalIssues) : 0} + '%'"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Scrum Sections -->
+                            <div class="col-md-9">
+                                <ul class="nav nav-tabs" role="tablist">
+                                    <li class="nav-item">
+                                        <a class="nav-link active" data-bs-toggle="tab" href="#working-${employeeEntry.key}" role="tab">
+                                            <i class="fas fa-code me-1"></i>Working On
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link" data-bs-toggle="tab" href="#completed-${employeeEntry.key}" role="tab">
+                                            <i class="fas fa-check me-1"></i>Completed
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link" data-bs-toggle="tab" href="#planned-${employeeEntry.key}" role="tab">
+                                            <i class="fas fa-list me-1"></i>Planned
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link" data-bs-toggle="tab" href="#blockers-${employeeEntry.key}" role="tab">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>Blockers
+                                        </a>
+                                    </li>
+                                </ul>
+                                
+                                <div class="tab-content mt-3">
+                                    <!-- Working On -->
+                                    <div class="tab-pane fade show active" th:id="'working-' + ${employeeEntry.key}" role="tabpanel">
+                                        <div th:if="${employeeEntry.value.workingOnToday and !employeeEntry.value.workingOnToday.empty}">
+                                            <div th:each="issue : ${employeeEntry.value.workingOnToday}" 
+                                                 class="issue-item in-progress">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div>
+                                                        <strong th:text="${issue.issueKey}">ISSUE-123</strong>
+                                                        <span th:text="${issue.summary}">Issue summary</span>
+                                                    </div>
+                                                    <span class="badge bg-warning" th:text="${issue.priority}">Priority</span>
+                                                </div>
+                                                <small class="text-muted">
+                                                    Project: <span th:text="${issue.projectKey}">PROJ</span> | 
+                                                    Story Points: <span th:text="${issue.storyPoints ?: 'N/A'}">SP</span>
+                                                </small>
+                                            </div>
+                                        </div>
+                                        <div th:if="${!employeeEntry.value.workingOnToday or employeeEntry.value.workingOnToday.empty}" class="empty-state">
+                                            <i class="fas fa-info-circle"></i>
+                                            <p>No issues currently in progress</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Completed -->
+                                    <div class="tab-pane fade" th:id="'completed-' + ${employeeEntry.key}" role="tabpanel">
+                                        <div th:if="${employeeEntry.value.completedToday and !employeeEntry.value.completedToday.empty}">
+                                            <div th:each="issue : ${employeeEntry.value.completedToday}" 
+                                                 class="issue-item completed">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div>
+                                                        <strong th:text="${issue.issueKey}">ISSUE-123</strong>
+                                                        <span th:text="${issue.summary}">Issue summary</span>
+                                                    </div>
+                                                    <span class="badge bg-success">Completed</span>
+                                                </div>
+                                                <small class="text-muted">
+                                                    Completed: <span th:text="${#dates.format(issue.updated, 'dd MMM HH:mm')}">Time</span> | 
+                                                    Story Points: <span th:text="${issue.storyPoints ?: 'N/A'}">SP</span>
+                                                </small>
+                                            </div>
+                                        </div>
+                                        <div th:if="${!employeeEntry.value.completedToday or employeeEntry.value.completedToday.empty}" class="empty-state">
+                                            <i class="fas fa-check-circle"></i>
+                                            <p>No issues completed today</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Planned -->
+                                    <div class="tab-pane fade" th:id="'planned-' + ${employeeEntry.key}" role="tabpanel">
+                                        <div th:if="${employeeEntry.value.plannedForNext and !employeeEntry.value.plannedForNext.empty}">
+                                            <div th:each="issue : ${employeeEntry.value.plannedForNext}" 
+                                                 class="issue-item todo">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div>
+                                                        <strong th:text="${issue.issueKey}">ISSUE-123</strong>
+                                                        <span th:text="${issue.summary}">Issue summary</span>
+                                                    </div>
+                                                    <span class="badge bg-secondary" th:text="${issue.priority}">Priority</span>
+                                                </div>
+                                                <small class="text-muted">
+                                                    Project: <span th:text="${issue.projectKey}">PROJ</span> | 
+                                                    Story Points: <span th:text="${issue.storyPoints ?: 'N/A'}">SP</span>
+                                                </small>
+                                            </div>
+                                        </div>
+                                        <div th:if="${!employeeEntry.value.plannedForNext or employeeEntry.value.plannedForNext.empty}" class="empty-state">
+                                            <i class="fas fa-list"></i>
+                                            <p>No planned issues</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Blockers -->
+                                    <div class="tab-pane fade" th:id="'blockers-' + ${employeeEntry.key}" role="tabpanel">
+                                        <div th:if="${employeeEntry.value.blockers and !employeeEntry.value.blockers.empty}">
+                                            <div th:each="issue : ${employeeEntry.value.blockers}" 
+                                                 class="issue-item blocked">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div>
+                                                        <strong th:text="${issue.issueKey}">ISSUE-123</strong>
+                                                        <span th:text="${issue.summary}">Issue summary</span>
+                                                    </div>
+                                                    <span class="badge bg-danger" th:text="${issue.status}">Status</span>
+                                                </div>
+                                                <small class="text-muted">
+                                                    Project: <span th:text="${issue.projectKey}">PROJ</span> | 
+                                                    Updated: <span th:text="${#dates.format(issue.updated, 'dd MMM HH:mm')}">Time</span>
+                                                </small>
+                                            </div>
+                                        </div>
+                                        <div th:if="${!employeeEntry.value.blockers or employeeEntry.value.blockers.empty}" class="empty-state">
+                                            <i class="fas fa-thumbs-up"></i>
+                                            <p>No blockers! Great progress!</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- No Data State -->
+                        <div class="row" th:if="${summary.employees == null or summary.employees.empty}">
+            <div class="col-12 text-center">
+                <div class="empty-state">
+                    <i class="fas fa-users fa-3x mb-3"></i>
+                    <h4>No Team Data Available</h4>
+                    <p>Sync with Jira to see your team's scrum updates</p>
+                    <button class="btn btn-primary" onclick="syncFromJira()">
+                        <i class="fas fa-download me-1"></i>Sync from Jira
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function refreshScrum() {
+            location.reload();
+        }
+        
+        function syncFromJira() {
+            fetch('/api/sync', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.text())
+            .then(data => {
+                alert('Sync completed: ' + data);
+                refreshScrum();
+            })
+            .catch(error => {
+                alert('Error syncing: ' + error);
+            });
+        }
+        
+        // Auto-refresh every 2 minutes for scrum
+        setInterval(refreshScrum, 120000);
+    </script>
+</body>
+</html> 

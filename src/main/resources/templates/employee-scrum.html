@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Scrum - Daily Standup</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .scrum-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .scrum-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px 15px 0 0;
+        }
+        .scrum-body {
+            padding: 20px;
+        }
+        .issue-item {
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .issue-item.completed { border-left-color: #28a745; }
+        .issue-item.blocked { border-left-color: #dc3545; }
+        .issue-item.in-progress { border-left-color: #ffc107; }
+        .issue-item.todo { border-left-color: #6c757d; }
+        .issue-item.overdue { border-left-color: #fd7e14; }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        .stat-label {
+            font-size: 0.8rem;
+            opacity: 0.9;
+        }
+        
+        .section-title {
+            color: #495057;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 8px;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+        
+        .empty-state {
+            text-align: center;
+            color: #6c757d;
+            padding: 30px;
+        }
+        .empty-state i {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+        
+        .priority-high { background-color: #f8d7da; }
+        .priority-medium { background-color: #fff3cd; }
+        .priority-low { background-color: #d1ecf1; }
+    </style>
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/scrum">
+                <i class="fas fa-users me-2"></i>
+                Daily Scrum
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/dashboard">
+                    <i class="fas fa-chart-line me-1"></i>Main Dashboard
+                </a>
+                <a class="nav-link" href="/scrum">
+                    <i class="fas fa-users me-1"></i>Team View
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Employee Header -->
+        <div class="scrum-card">
+            <div class="scrum-header">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h2 class="mb-0">
+                            <i class="fas fa-user me-2"></i>
+                            <span th:text="${assignee}">Employee Name</span>
+                        </h2>
+                        <p class="mb-0 mt-2">Daily Standup Summary</p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <span class="badge bg-light text-dark">
+                            <i class="fas fa-calendar me-1"></i>
+                            <span th:text="${#dates.format(#dates.createNow(), 'dd MMM yyyy')}">Today</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="scrum-body">
+                <!-- Quick Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" th:text="${summary.totalIssues}">0</div>
+                        <div class="stat-label">Total Issues</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        <div class="stat-number" th:text="${summary.workingOnToday?.size() ?: 0}">0</div>
+                        <div class="stat-label">In Progress</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                        <div class="stat-number" th:text="${summary.completedIssues}">0</div>
+                        <div class="stat-label">Completed Today</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                        <div class="stat-number" th:text="${summary.completedStoryPoints}">0</div>
+                        <div class="stat-label">Story Points Done</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); color: #333;">
+                        <div class="stat-number" th:text="${summary.blockers?.size() ?: 0}">0</div>
+                        <div class="stat-label">Blockers</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #333;">
+                        <div class="stat-number" th:text="${summary.overdueIssues?.size() ?: 0}">0</div>
+                        <div class="stat-label">Overdue</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scrum Sections -->
+        <div class="row">
+            <!-- Left Column -->
+            <div class="col-md-6">
+                <!-- What I'm Working On Today -->
+                <div class="scrum-card">
+                    <div class="scrum-body">
+                        <h5 class="section-title">
+                            <i class="fas fa-code text-primary me-2"></i>
+                            What I'm Working On Today
+                        </h5>
+                        <div th:if="${summary.workingOnToday != null and !summary.workingOnToday.empty}">
+                            <div th:each="issue : ${summary.workingOnToday}" 
+                                 th:class="'issue-item in-progress priority-' + ${issue.priority?.toLowerCase()}"
+                                 th:attr="data-issue-key=${issue.issueKey}">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <strong th:text="${issue.issueKey}">ISSUE-123</strong>
+                                        <span th:text="${issue.summary}">Issue summary</span>
+                                    </div>
+                                    <span class="badge bg-warning" th:text="${issue.priority}">Priority</span>
+                                </div>
+                                <div class="mt-2">
+                                    <small class="text-muted">
+                                        <i class="fas fa-project-diagram me-1"></i>
+                                        <span th:text="${issue.projectKey}">PROJ</span> | 
+                                        <i class="fas fa-star me-1"></i>
+                                        <span th:text="${issue.storyPoints ?: 'N/A'}">SP</span> | 
+                                        <i class="fas fa-clock me-1"></i>
+                                        <span th:text="${#dates.format(issue.updated, 'dd MMM HH:mm')}">Updated</span>
+                                    </small>
+                                </div>
+                                <div th:if="${issue.description}" class="mt-2">
+                                    <small class="text-muted" th:text="${#strings.abbreviate(issue.description, 100)}">Description</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div th:if="${summary.workingOnToday == null or summary.workingOnToday.empty}" class="empty-state">
+                            <i class="fas fa-info-circle"></i>
+                            <p>No issues currently in progress</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- What I Completed Today -->
+                <div class="scrum-card">
+                    <div class="scrum-body">
+                        <h5 class="section-title">
+                            <i class="fas fa-check text-success me-2"></i>
+                            What I Completed Today
+                        </h5>
+                        <div th:if="${summary.completedToday != null and !summary.completedToday.empty}">
+                            <div th:each="issue : ${summary.completedToday}" 
+                                 class="issue-item completed"
+                                 th:attr="data-issue-key=${issue.issueKey}">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <strong th:text="${issue.issueKey}">ISSUE-123</strong>
+                                        <span th:text="${issue.summary}">Issue summary</span>
+                                    </div>
+                                    <span class="badge bg-success">Completed</span>
+                                </div>
+                                <div class="mt-2">
+                                    <small class="text-muted">
+                                        <i class="fas fa-project-diagram me-1"></i>
+                                        <span th:text="${issue.projectKey}">PROJ</span> | 
+                                        <i class="fas fa-star me-1"></i>
+                                        <span th:text="${issue.storyPoints ?: 'N/A'}">SP</span> | 
+                                        <i class="fas fa-clock me-1"></i>
+                                        <span th:text="${#dates.format(issue.updated, 'dd MMM HH:mm')}">Completed</span>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                        <div th:if="${summary.completedToday == null or summary.completedToday.empty}" class="empty-state">
+                            <i class="fas fa-check-circle"></i>
+                            <p>No issues completed today</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column -->
+            <div class="col-md-6">
+                <!-- What I Plan to Work On Next -->
+                <div class="scrum-card">
+                    <div class="scrum-body">
+                        <h5 class="section-title">
+                            <i class="fas fa-list text-info me-2"></i>
+                            What I Plan to Work On Next
+                        </h5>
+                        <div th:if="${summary.plannedForNext != null and !summary.plannedForNext.empty}">
+                            <div th:each="issue : ${summary.plannedForNext}" 
+                                 th:class="'issue-item todo priority-' + ${issue.priority?.toLowerCase()}"
+                                 th:attr="data-issue-key=${issue.issueKey}">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <strong th:text="${issue.issueKey}">ISSUE-123</strong>
+                                        <span th:text="${issue.summary}">Issue summary</span>
+                                    </div>
+                                    <span class="badge bg-secondary" th:text="${issue.priority}">Priority</span>
+                                </div>
+                                <div class="mt-2">
+                                    <small class="text-muted">
+                                        <i class="fas fa-project-diagram me-1"></i>
+                                        <span th:text="${issue.projectKey}">PROJ</span> | 
+                                        <i class="fas fa-star me-1"></i>
+                                        <span th:text="${issue.storyPoints ?: 'N/A'}">SP</span>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                        <div th:if="${summary.plannedForNext == null or summary.plannedForNext.empty}" class="empty-state">
+                            <i class="fas fa-list"></i>
+                            <p>No planned issues</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Blockers/Issues -->
+                <div class="scrum-card">
+                    <div class="scrum-body">
+                        <h5 class="section-title">
+                            <i class="fas fa-exclamation-triangle text-danger me-2"></i>
+                            Blockers/Issues
+                        </h5>
+                        <div th:if="${summary.blockers != null and !summary.blockers.empty}">
+                            <div th:each="issue : ${summary.blockers}" 
+                                 class="issue-item blocked"
+                                 th:attr="data-issue-key=${issue.issueKey}">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <strong th:text="${issue.issueKey}">ISSUE-123</strong>
+                                        <span th:text="${issue.summary}">Issue summary</span>
+                                    </div>
+                                    <span class="badge bg-danger" th:text="${issue.status}">Status</span>
+                                </div>
+                                <div class="mt-2">
+                                    <small class="text-muted">
+                                        <i class="fas fa-project-diagram me-1"></i>
+                                        <span th:text="${issue.projectKey}">PROJ</span> | 
+                                        <i class="fas fa-clock me-1"></i>
+                                        <span th:text="${#dates.format(issue.updated, 'dd MMM HH:mm')}">Updated</span>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                        <div th:if="${summary.blockers == null or summary.blockers.empty}" class="empty-state">
+                            <i class="fas fa-thumbs-up"></i>
+                            <p>No blockers! Great progress!</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Overdue Issues -->
+                                    <div class="scrum-card" th:if="${summary.overdueIssues != null and !summary.overdueIssues.empty}">
+                    <div class="scrum-body">
+                        <h5 class="section-title">
+                            <i class="fas fa-exclamation-circle text-warning me-2"></i>
+                            Overdue Issues
+                        </h5>
+                        <div th:each="issue : ${summary.overdueIssues}" 
+                             class="issue-item overdue"
+                             th:attr="data-issue-key=${issue.issueKey}">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong th:text="${issue.issueKey}">ISSUE-123</strong>
+                                    <span th:text="${issue.summary}">Issue summary</span>
+                                </div>
+                                <span class="badge bg-warning">Overdue</span>
+                            </div>
+                            <div class="mt-2">
+                                <small class="text-muted">
+                                    <i class="fas fa-project-diagram me-1"></i>
+                                    <span th:text="${issue.projectKey}">PROJ</span> | 
+                                    <i class="fas fa-calendar-times me-1"></i>
+                                    Due: <span th:text="${#dates.format(issue.dueDate, 'dd MMM yyyy')}">Due date</span>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="scrum-card">
+            <div class="scrum-body">
+                <h5 class="section-title">
+                    <i class="fas fa-history text-secondary me-2"></i>
+                    Recent Activity (Last 24 Hours)
+                </h5>
+                                    <div th:if="${summary.recentlyWorkedOn != null and !summary.recentlyWorkedOn.empty}">
+                    <div class="row">
+                        <div th:each="issue : ${summary.recentlyWorkedOn}" class="col-md-6 mb-3">
+                            <div class="issue-item" 
+                                 th:class="'issue-item ' + ${issue.status == 'DONE' ? 'completed' : 
+                                                           issue.status == 'IN_PROGRESS' ? 'in-progress' : 
+                                                           issue.status == 'BLOCKED' ? 'blocked' : 'todo'}"
+                                 th:attr="data-issue-key=${issue.issueKey}">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <strong th:text="${issue.issueKey}">ISSUE-123</strong>
+                                        <span th:text="${issue.summary}">Issue summary</span>
+                                    </div>
+                                    <span class="badge" 
+                                          th:class="'bg-' + ${issue.status == 'DONE' ? 'success' : 
+                                                           issue.status == 'IN_PROGRESS' ? 'warning' : 
+                                                           issue.status == 'BLOCKED' ? 'danger' : 'secondary'}"
+                                          th:text="${issue.status}">Status</span>
+                                </div>
+                                <div class="mt-2">
+                                    <small class="text-muted">
+                                        <i class="fas fa-clock me-1"></i>
+                                        <span th:text="${#dates.format(issue.updated, 'dd MMM HH:mm')}">Updated</span> | 
+                                        <i class="fas fa-project-diagram me-1"></i>
+                                        <span th:text="${issue.projectKey}">PROJ</span>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                                    <div th:if="${summary.recentlyWorkedOn == null or summary.recentlyWorkedOn.empty}" class="empty-state">
+                    <i class="fas fa-info-circle"></i>
+                    <p>No recent activity</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Auto-refresh every 2 minutes
+        setInterval(() => location.reload(), 120000);
+    </script>
+</body>
+</html> 

@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jira Dashboard - Daily Scrum Summary</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .status-card {
+            transition: transform 0.2s;
+        }
+        .status-card:hover {
+            transform: translateY(-5px);
+        }
+        .status-todo { background: linear-gradient(135deg, #ff6b6b, #ee5a52); }
+        .status-progress { background: linear-gradient(135deg, #4ecdc4, #44a08d); }
+        .status-qa { background: linear-gradient(135deg, #45b7d1, #96c93d); }
+        .status-uat { background: linear-gradient(135deg, #f093fb, #f5576c); }
+        .status-done { background: linear-gradient(135deg, #4facfe, #00f2fe); }
+        .status-blocked { background: linear-gradient(135deg, #fa709a, #fee140); }
+        
+        .metric-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .issue-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .issue-item {
+            border-left: 4px solid #007bff;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        
+        .priority-high { border-left-color: #dc3545; }
+        .priority-medium { border-left-color: #ffc107; }
+        .priority-low { border-left-color: #28a745; }
+        
+        .refresh-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-chart-line me-2"></i>
+                Jira Dashboard Tracker
+            </a>
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text">
+                    <i class="fas fa-clock me-1"></i>
+                    <span th:text="${#temporals.format(T(java.time.LocalDateTime).now(), 'dd MMM yyyy HH:mm')}">Today</span>
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Header Section -->
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <h1 class="h3 mb-0">Daily Scrum Dashboard</h1>
+                <p class="text-muted">Real-time overview of your team's Jira issues</p>
+            </div>
+            <div class="col-md-4 text-end">
+                <a href="/scrum" class="btn btn-info me-2">
+                    <i class="fas fa-users me-1"></i> Daily Scrum
+                </a>
+                <button class="btn btn-outline-primary" onclick="refreshDashboard()">
+                    <i class="fas fa-sync-alt me-1"></i> Refresh
+                </button>
+                <button class="btn btn-success" onclick="syncFromJira()">
+                    <i class="fas fa-download me-1"></i> Sync from Jira
+                </button>
+            </div>
+        </div>
+
+        <!-- Status Overview Cards -->
+        <div class="row mb-4">
+            <div class="col-md-2">
+                <div class="metric-card status-todo text-white text-center">
+                    <i class="fas fa-list fa-2x mb-2"></i>
+                    <h4 th:text="${summary.statusBreakdown != null and summary.statusBreakdown['TO_DO'] != null ? summary.statusBreakdown['TO_DO'] : 0}">0</h4>
+                    <small>To Do</small>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="metric-card status-progress text-white text-center">
+                    <i class="fas fa-code fa-2x mb-2"></i>
+                    <h4 th:text="${summary.statusBreakdown != null and summary.statusBreakdown['IN_PROGRESS'] != null ? summary.statusBreakdown['IN_PROGRESS'] : 0}">0</h4>
+                    <small>In Progress</small>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="metric-card status-qa text-white text-center">
+                    <i class="fas fa-bug fa-2x mb-2"></i>
+                    <h4 th:text="${(summary.statusBreakdown != null and summary.statusBreakdown['IN_QA'] != null ? summary.statusBreakdown['IN_QA'] : 0) + (summary.statusBreakdown != null and summary.statusBreakdown['QA_PASSED'] != null ? summary.statusBreakdown['QA_PASSED'] : 0)}">0</h4>
+                    <small>In QA</small>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="metric-card status-uat text-white text-center">
+                    <i class="fas fa-users fa-2x mb-2"></i>
+                    <h4 th:text="${(summary.statusBreakdown != null and summary.statusBreakdown['IN_UAT'] != null ? summary.statusBreakdown['IN_UAT'] : 0) + (summary.statusBreakdown != null and summary.statusBreakdown['UAT_PASSED'] != null ? summary.statusBreakdown['UAT_PASSED'] : 0)}">0</h4>
+                    <small>In UAT</small>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="metric-card status-done text-white text-center">
+                    <i class="fas fa-check-circle fa-2x mb-2"></i>
+                    <h4 th:text="${summary.statusBreakdown != null and summary.statusBreakdown['DONE'] != null ? summary.statusBreakdown['DONE'] : 0}">0</h4>
+                    <small>Done</small>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="metric-card status-blocked text-white text-center">
+                    <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
+                    <h4 th:text="${summary.statusBreakdown != null and summary.statusBreakdown['BLOCKED'] != null ? summary.statusBreakdown['BLOCKED'] : 0}">0</h4>
+                    <small>Blocked</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="row">
+            <!-- Left Column -->
+            <div class="col-md-8">
+                <!-- Overdue Issues -->
+                <div class="metric-card">
+                    <h5 class="card-title">
+                        <i class="fas fa-exclamation-circle text-danger me-2"></i>
+                        Overdue Issues
+                    </h5>
+                    <div class="issue-list" th:if="${summary.overdueIssues != null and !summary.overdueIssues.empty}">
+                        <div th:each="issue : ${summary.overdueIssues}" 
+                             th:class="'issue-item priority-' + ${issue.priority?.toLowerCase()}"
+                             th:attr="data-issue-key=${issue.issueKey}">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong th:text="${issue.issueKey}">ISSUE-123</strong>
+                                    <span th:text="${issue.summary}">Issue summary</span>
+                                </div>
+                                <span class="badge bg-danger" th:text="${issue.assignee}">Assignee</span>
+                            </div>
+                            <small class="text-muted">
+                                Due: <span th:text="${issue.dueDate != null ? #temporals.format(issue.dueDate, 'dd MMM yyyy') : 'No due date'}">Due date</span>
+                            </small>
+                        </div>
+                    </div>
+                    <div th:if="${summary.overdueIssues == null or summary.overdueIssues.empty}" class="text-center text-muted">
+                        <i class="fas fa-check-circle fa-2x mb-2"></i>
+                        <p>No overdue issues! Great job team!</p>
+                    </div>
+                </div>
+
+                <!-- Recently Updated -->
+                <div class="metric-card">
+                    <h5 class="card-title">
+                        <i class="fas fa-clock text-info me-2"></i>
+                        Recently Updated
+                    </h5>
+                                            <div class="issue-list" th:if="${summary.recentlyUpdated != null and !summary.recentlyUpdated.empty}">
+                        <div th:each="issue : ${summary.recentlyUpdated}" 
+                             th:class="'issue-item priority-' + ${issue.priority?.toLowerCase()}"
+                             th:attr="data-issue-key=${issue.issueKey}">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong th:text="${issue.issueKey}">ISSUE-123</strong>
+                                    <span th:text="${issue.summary}">Issue summary</span>
+                                </div>
+                                <span class="badge" 
+                                      th:class="'bg-' + ${issue.status == 'IN_PROGRESS' ? 'primary' : 
+                                                       issue.status == 'IN_QA' ? 'success' : 
+                                                       issue.status == 'IN_UAT' ? 'warning' : 'secondary'}"
+                                      th:text="${issue.status}">Status</span>
+                            </div>
+                            <small class="text-muted">
+                                Updated: <span th:text="${issue.updated != null ? #temporals.format(issue.updated, 'dd MMM HH:mm') : 'Unknown'}">Updated</span>
+                            </small>
+                        </div>
+                    </div>
+                                            <div th:if="${summary.recentlyUpdated == null or summary.recentlyUpdated.empty}" class="text-center text-muted">
+                        <i class="fas fa-info-circle fa-2x mb-2"></i>
+                        <p>No recently updated issues</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column -->
+            <div class="col-md-4">
+                <!-- Team Member Summary -->
+                <div class="metric-card">
+                    <h5 class="card-title">
+                        <i class="fas fa-users text-primary me-2"></i>
+                        Team Workload
+                    </h5>
+                    <div th:if="${summary.assigneeBreakdown}">
+                        <div th:each="entry : ${summary.assigneeBreakdown}" class="mb-2">
+                            <div class="d-flex justify-content-between">
+                                <span th:text="${entry.key}">Team Member</span>
+                                <span class="badge bg-primary" th:text="${entry.value}">0</span>
+                            </div>
+                            <div class="progress mt-1" style="height: 5px;">
+                                <div class="progress-bar" 
+                                     th:style="'width: ' + ${entry.value * 100 / summary.totalIssues} + '%'"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project Summary -->
+                <div class="metric-card">
+                    <h5 class="card-title">
+                        <i class="fas fa-project-diagram text-success me-2"></i>
+                        Project Distribution
+                    </h5>
+                    <div th:if="${summary.projectBreakdown}">
+                        <div th:each="entry : ${summary.projectBreakdown}" class="mb-2">
+                            <div class="d-flex justify-content-between">
+                                <span th:text="${entry.key}">Project</span>
+                                <span class="badge bg-success" th:text="${entry.value}">0</span>
+                            </div>
+                            <div class="progress mt-1" style="height: 5px;">
+                                <div class="progress-bar bg-success" 
+                                     th:style="'width: ' + ${entry.value * 100 / summary.totalIssues} + '%'"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="metric-card">
+                    <h5 class="card-title">
+                        <i class="fas fa-chart-bar text-warning me-2"></i>
+                        Quick Stats
+                    </h5>
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <h4 class="text-primary" th:text="${summary.totalIssues}">0</h4>
+                            <small>Total Issues</small>
+                        </div>
+                        <div class="col-6">
+                            <h4 class="text-success" th:text="${summary.statusBreakdown != null and summary.statusBreakdown['DONE'] != null ? summary.statusBreakdown['DONE'] : 0}">0</h4>
+                            <small>Completed</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Refresh Button -->
+    <button class="btn btn-primary btn-lg rounded-circle refresh-btn" onclick="refreshDashboard()">
+        <i class="fas fa-sync-alt"></i>
+    </button>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function refreshDashboard() {
+            location.reload();
+        }
+        
+        function syncFromJira() {
+            fetch('/api/sync', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.text())
+            .then(data => {
+                alert('Sync completed: ' + data);
+                refreshDashboard();
+            })
+            .catch(error => {
+                alert('Error syncing: ' + error);
+            });
+        }
+        
+        // Auto-refresh every 5 minutes
+        setInterval(refreshDashboard, 300000);
+    </script>
+</body>
+</html> 
