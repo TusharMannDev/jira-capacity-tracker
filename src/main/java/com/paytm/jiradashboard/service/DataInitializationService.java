@@ -21,9 +21,21 @@ public class DataInitializationService {
     
     @EventListener(ApplicationReadyEvent.class)
     public void initializeSampleData() {
-        log.info("Initializing sample data for capacity planning...");
+        log.info("Checking if sample data cleanup is needed...");
         
-        // Only initialize if no data exists
+        // Check if we have real Jira-generated team members
+        boolean hasRealJiraData = teamMemberRepository.findAll().stream()
+                .anyMatch(member -> member.getNotes() != null && 
+                          member.getNotes().contains("Auto-created from Jira assignee"));
+        
+        if (hasRealJiraData) {
+            // Remove sample data if real Jira data exists
+            cleanupSampleData();
+            log.info("Sample data cleanup completed - using real Jira data only");
+            return;
+        }
+        
+        // Only initialize sample data if no data exists and no real Jira data
         if (teamMemberRepository.count() == 0) {
             initializeTeamMembers();
             log.info("Sample team members created");
@@ -35,6 +47,29 @@ public class DataInitializationService {
         }
         
         log.info("Sample data initialization completed");
+    }
+    
+    private void cleanupSampleData() {
+        // Remove sample team members (those without "Auto-created from Jira assignee" note)
+        List<TeamMember> sampleMembers = teamMemberRepository.findAll().stream()
+                .filter(member -> member.getNotes() == null || 
+                                !member.getNotes().contains("Auto-created from Jira assignee"))
+                .toList();
+        
+        if (!sampleMembers.isEmpty()) {
+            log.info("Removing {} sample team members", sampleMembers.size());
+            teamMemberRepository.deleteAll(sampleMembers);
+        }
+        
+        // Remove sample task assignments (those with fake COP- keys)
+        List<TaskAssignment> sampleAssignments = taskAssignmentRepository.findAll().stream()
+                .filter(assignment -> assignment.getIssueKey().matches("COP-10[1-7]"))
+                .toList();
+        
+        if (!sampleAssignments.isEmpty()) {
+            log.info("Removing {} sample task assignments", sampleAssignments.size());
+            taskAssignmentRepository.deleteAll(sampleAssignments);
+        }
     }
     
     private void initializeTeamMembers() {

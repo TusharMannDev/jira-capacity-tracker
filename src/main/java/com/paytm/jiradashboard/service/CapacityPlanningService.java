@@ -152,10 +152,46 @@ public class CapacityPlanningService {
         List<JiraIssue> activeIssues = jiraIssueRepository.findByStatusIn(
                 Arrays.asList(IssueStatus.TO_DO, IssueStatus.IN_PROGRESS, IssueStatus.IN_REVIEW));
         
+        // First, ensure all assignees exist as team members
+        Set<String> assignees = activeIssues.stream()
+                .map(JiraIssue::getAssignee)
+                .filter(assignee -> assignee != null && !assignee.equals("Unassigned"))
+                .collect(Collectors.toSet());
+        
+        for (String assignee : assignees) {
+            ensureTeamMemberExists(assignee);
+        }
+        
+        // Then sync task assignments
         for (JiraIssue issue : activeIssues) {
             if (!issue.getAssignee().equals("Unassigned")) {
                 syncTaskAssignment(issue);
             }
+        }
+        
+        log.info("Synced {} issues with {} unique assignees", activeIssues.size(), assignees.size());
+    }
+
+    private void ensureTeamMemberExists(String assigneeName) {
+        Optional<TeamMember> existingMember = teamMemberRepository.findByName(assigneeName);
+        
+        if (existingMember.isEmpty()) {
+            // Create a new team member with default values
+            TeamMember newMember = TeamMember.builder()
+                    .name(assigneeName)
+                    .email(assigneeName.toLowerCase().replace(" ", ".") + "@paytm.com") // Generate email
+                    .role("Developer") // Default role
+                    .team("Development") // Default team
+                    .hoursPerDay(8) // Standard 8 hours
+                    .capacityMultiplier(1.0) // Full capacity
+                    .isActive(true)
+                    .startDate(LocalDate.now())
+                    .skills("Java, Spring Boot") // Default skills
+                    .notes("Auto-created from Jira assignee")
+                    .build();
+            
+            teamMemberRepository.save(newMember);
+            log.info("Created new team member for Jira assignee: {}", assigneeName);
         }
     }
 
