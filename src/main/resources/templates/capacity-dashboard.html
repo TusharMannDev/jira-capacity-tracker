@@ -58,43 +58,13 @@
     </nav>
 
     <div class="container-fluid mt-4">
-        <!-- Header Stats -->
-        <div class="row">
-            <div class="col-md-3">
-                <div class="stats-card text-center">
-                    <h3 id="totalMembers" class="text-primary">0</h3>
-                    <p class="mb-0">Active Team Members</p>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="stats-card text-center">
-                    <h3 id="totalAssignments" class="text-info">0</h3>
-                    <p class="mb-0">Active Assignments</p>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="stats-card text-center">
-                    <h3 id="blockedTasks" class="text-danger">0</h3>
-                    <p class="mb-0">Blocked Tasks</p>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="stats-card text-center">
-                    <h3 id="overdueTasks" class="text-warning">0</h3>
-                    <p class="mb-0">Overdue Tasks</p>
-                </div>
-            </div>
-        </div>
+
 
         <!-- Action Buttons -->
         <div class="row mb-3">
             <div class="col-12">
-                <button id="syncJiraBtn" class="btn btn-primary me-2">
-                    <i class="fas fa-sync-alt"></i> Sync with Jira
-                </button>
-                <button id="exportSheetsBtn" class="btn btn-success me-2">
-                    <i class="fas fa-table"></i> Export to Google Sheets
-                </button>
+
+
                 <button id="exportCsvBtn" class="btn btn-outline-secondary me-2">
                     <i class="fas fa-file-csv"></i> Export as CSV
                 </button>
@@ -116,120 +86,82 @@
             </div>
         </div>
 
-        <!-- Resource Availability Forecast -->
-        <div class="row">
-            <div class="col-md-8">
-                <div class="stats-card">
-                    <h4><i class="fas fa-chart-area"></i> Resource Availability Forecast (Next 30 Days)</h4>
-                    <canvas id="forecastChart" class="forecast-chart"></canvas>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="stats-card">
-                    <h4><i class="fas fa-exclamation-triangle"></i> Alerts</h4>
-                    <div id="alertsContainer">
-                        <!-- Alerts will be populated here -->
-                    </div>
-                </div>
-            </div>
-        </div>
 
-        <!-- Detailed View -->
-        <div class="row">
-            <div class="col-md-6">
-                <div class="stats-card">
-                    <h4><i class="fas fa-clock"></i> Overdue Tasks</h4>
-                    <div id="overdueTasksContainer">
-                        <!-- Overdue tasks will be populated here -->
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="stats-card">
-                    <h4><i class="fas fa-ban"></i> Blocked Tasks</h4>
-                    <div id="blockedTasksContainer">
-                        <!-- Blocked tasks will be populated here -->
-                    </div>
-                </div>
-            </div>
-        </div>
+
+
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        let forecastChart;
+
 
         // Load dashboard data
         function loadDashboard() {
-            loadTeamStats();
             loadTeamCapacity();
-            loadResourceForecast();
-            loadOverdueTasks();
-            loadBlockedTasks();
-        }
-
-        // Load team statistics
-        function loadTeamStats() {
-            fetch('/api/capacity/team-stats')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('totalMembers').textContent = data.totalActiveMembers;
-                    document.getElementById('totalAssignments').textContent = data.totalActiveAssignments;
-                    document.getElementById('blockedTasks').textContent = data.blockedTasks;
-                    document.getElementById('overdueTasks').textContent = data.overdueTasks;
-                })
-                .catch(error => console.error('Error loading team stats:', error));
         }
 
         // Load team capacity summary
         function loadTeamCapacity() {
-            fetch('/api/capacity/team-summary')
+            fetch('/api/capacity/team-summary/realtime')
                 .then(response => response.json())
                 .then(data => {
                     const container = document.getElementById('teamCapacityContainer');
                     container.innerHTML = '';
                     
-                    data.forEach(member => {
-                        const memberCard = createMemberCard(member);
-                        container.appendChild(memberCard);
-                    });
+                    if (data.employeeSummaries && Object.keys(data.employeeSummaries).length > 0) {
+                        Object.entries(data.employeeSummaries).forEach(([assignee, summary]) => {
+                            const memberCard = createMemberCard(assignee, summary);
+                            container.appendChild(memberCard);
+                        });
+                    } else {
+                        container.innerHTML = '<div class="col-12"><div class="alert alert-info">No team member data available</div></div>';
+                    }
                 })
-                .catch(error => console.error('Error loading team capacity:', error));
+                .catch(error => {
+                    console.error('Error loading team capacity:', error);
+                    const container = document.getElementById('teamCapacityContainer');
+                    container.innerHTML = '<div class="col-12"><div class="alert alert-danger">Error loading team capacity data</div></div>';
+                });
         }
 
         // Create member capacity card
-        function createMemberCard(member) {
+        function createMemberCard(assignee, summary) {
             const col = document.createElement('div');
             col.className = 'col-md-4 mb-3';
             
-            const statusClass = member.isOverloaded ? 'overloaded' : 
-                               member.utilizationPercentage < 50 ? 'available' : 'busy';
+            // Calculate utilization based on completion percentage
+            const utilizationPercentage = summary.completionPercentage || 0;
+            const statusClass = utilizationPercentage > 90 ? 'overloaded' : 
+                               utilizationPercentage < 30 ? 'available' : 'busy';
             
-            const utilizationColor = member.utilizationPercentage > 90 ? '#dc3545' :
-                                   member.utilizationPercentage > 70 ? '#ffc107' : '#28a745';
+            const utilizationColor = utilizationPercentage > 90 ? '#dc3545' :
+                                   utilizationPercentage > 70 ? '#ffc107' : '#28a745';
             
             col.innerHTML = `
                 <div class="card h-100 ${statusClass}">
                     <div class="card-body">
                         <h5 class="card-title">
-                            <i class="fas fa-user"></i> ${member.memberName}
+                            <i class="fas fa-user"></i> ${assignee}
                         </h5>
                         <p class="card-text">
-                            <strong>Role:</strong> ${member.role || 'N/A'}<br>
-                            <strong>Team:</strong> ${member.team || 'N/A'}<br>
-                            <strong>Active Tasks:</strong> ${member.activeTasks}<br>
-                            <strong>Remaining Hours:</strong> ${member.totalRemainingHours}<br>
-                            <strong>Available From:</strong> ${new Date(member.estimatedAvailableDate).toLocaleDateString()}
+                            <strong>Total Issues:</strong> ${summary.totalIssues || 0}<br>
+                            <strong>To Do:</strong> ${summary.toDoIssues || 0}<br>
+                            <strong>In Progress:</strong> ${summary.inProgressIssues || 0}<br>
+                            <strong>Done:</strong> ${summary.doneIssues || 0}<br>
+                            <strong>Blocked:</strong> ${summary.blockedIssues || 0}
                         </p>
                         <div class="mb-2">
-                            <small>Utilization: ${member.utilizationPercentage.toFixed(1)}%</small>
+                            <small>Completion: ${utilizationPercentage.toFixed(1)}%</small>
                             <div class="utilization-bar">
                                 <div class="utilization-fill" 
-                                     style="width: ${member.utilizationPercentage}%; background-color: ${utilizationColor}">
+                                     style="width: ${utilizationPercentage}%; background-color: ${utilizationColor}">
                                 </div>
                             </div>
                         </div>
-                        ${member.isOverloaded ? '<span class="badge bg-danger">Overloaded</span>' : ''}
+                        ${utilizationPercentage > 90 ? '<span class="badge bg-danger">High Load</span>' : ''}
+                        <small class="text-muted d-block mt-2">
+                            Last Updated: ${new Date(summary.lastSyncTime).toLocaleString()}
+                        </small>
                     </div>
                 </div>
             `;
@@ -237,184 +169,15 @@
             return col;
         }
 
-        // Load resource availability forecast
-        function loadResourceForecast() {
-            fetch('/api/capacity/resource-availability?daysAhead=30')
-                .then(response => response.json())
-                .then(data => {
-                    createForecastChart(data);
-                })
-                .catch(error => console.error('Error loading resource forecast:', error));
-        }
 
-        // Create forecast chart
-        function createForecastChart(data) {
-            const ctx = document.getElementById('forecastChart').getContext('2d');
-            
-            if (forecastChart) {
-                forecastChart.destroy();
-            }
-            
-            const datasets = data.slice(0, 5).map((member, index) => {
-                const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'];
-                return {
-                    label: member.memberName,
-                    data: Object.values(member.workloadForecast || {}),
-                    borderColor: colors[index],
-                    backgroundColor: colors[index] + '20',
-                    fill: false,
-                    tension: 0.1
-                };
-            });
-            
-            forecastChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: generateDateLabels(30),
-                    datasets: datasets
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Hours'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Date'
-                            }
-                        }
-                    },
-                    plugins: {
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false
-                        }
-                    }
-                }
-            });
-        }
 
-        // Generate date labels for chart
-        function generateDateLabels(days) {
-            const labels = [];
-            const today = new Date();
-            for (let i = 0; i < days; i++) {
-                const date = new Date(today);
-                date.setDate(date.getDate() + i);
-                labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-            }
-            return labels;
-        }
 
-        // Load overdue tasks
-        function loadOverdueTasks() {
-            fetch('/api/capacity/overdue-tasks')
-                .then(response => response.json())
-                .then(data => {
-                    const container = document.getElementById('overdueTasksContainer');
-                    container.innerHTML = '';
-                    
-                    if (data.length === 0) {
-                        container.innerHTML = '<p class="text-muted">No overdue tasks</p>';
-                        return;
-                    }
-                    
-                    data.forEach(task => {
-                        const taskElement = document.createElement('div');
-                        taskElement.className = 'border-bottom py-2';
-                        taskElement.innerHTML = `
-                            <strong>${task.issueKey}</strong><br>
-                            <small>Assignee: ${task.assigneeName}</small><br>
-                            <small>Due: ${new Date(task.estimatedCompletionDate).toLocaleDateString()}</small>
-                        `;
-                        container.appendChild(taskElement);
-                    });
-                })
-                .catch(error => console.error('Error loading overdue tasks:', error));
-        }
 
-        // Load blocked tasks
-        function loadBlockedTasks() {
-            fetch('/api/capacity/blocked-tasks')
-                .then(response => response.json())
-                .then(data => {
-                    const container = document.getElementById('blockedTasksContainer');
-                    container.innerHTML = '';
-                    
-                    if (data.length === 0) {
-                        container.innerHTML = '<p class="text-muted">No blocked tasks</p>';
-                        return;
-                    }
-                    
-                    data.forEach(task => {
-                        const taskElement = document.createElement('div');
-                        taskElement.className = 'border-bottom py-2';
-                        taskElement.innerHTML = `
-                            <strong>${task.issueKey}</strong><br>
-                            <small>Assignee: ${task.assigneeName}</small><br>
-                            <small>Reason: ${task.blockingReason || 'Not specified'}</small>
-                        `;
-                        container.appendChild(taskElement);
-                    });
-                })
-                .catch(error => console.error('Error loading blocked tasks:', error));
-        }
 
-        // Sync with Jira
-        document.getElementById('syncJiraBtn').addEventListener('click', function() {
-            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
-            this.disabled = true;
-            
-            fetch('/api/capacity/sync-jira', { method: 'POST' })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        alert('Jira sync completed successfully!');
-                        loadDashboard();
-                    } else {
-                        alert('Sync failed: ' + data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('Sync error:', error);
-                    alert('Sync failed. Please try again.');
-                })
-                .finally(() => {
-                    this.innerHTML = '<i class="fas fa-sync-alt"></i> Sync with Jira';
-                    this.disabled = false;
-                });
-        });
 
-        // Export to Google Sheets
-        document.getElementById('exportSheetsBtn').addEventListener('click', function() {
-            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Sheet...';
-            this.disabled = true;
-            
-            fetch('/api/sheets/create-capacity-tracker', { method: 'POST' })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        alert('Capacity tracking sheet created successfully!\n\nResult: ' + data.result);
-                    } else {
-                        alert('Export failed: ' + data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('Export error:', error);
-                    alert('Export failed. Please try again.');
-                })
-                .finally(() => {
-                    this.innerHTML = '<i class="fas fa-table"></i> Export to Google Sheets';
-                    this.disabled = false;
-                });
-        });
+
+
+
 
         // Export as CSV
         document.getElementById('exportCsvBtn').addEventListener('click', function() {
