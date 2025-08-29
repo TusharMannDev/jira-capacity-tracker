@@ -253,8 +253,4 @@ public class JiraApiService {
         headers.setContentType(MediaType.APPLICATION_JSON);
         return headers;
     }
-    
-    public String getJqlFilter() {
-        return jqlFilter;
-    }
 } 

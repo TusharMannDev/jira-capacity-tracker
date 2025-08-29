@@ -2,8 +2,10 @@ package com.paytm.jiradashboard.service;
 
 import com.paytm.jiradashboard.model.IssueStatus;
 import com.paytm.jiradashboard.model.JiraIssue;
+import com.paytm.jiradashboard.repository.JiraIssueRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -17,364 +19,289 @@ public class DashboardService {
     @Autowired
     private JiraApiService jiraApiService;
     
-    // ===== REAL-TIME METHODS (Direct from Jira API) =====
+    @Autowired
+    private JiraIssueRepository jiraIssueRepository;
     
-    /**
-     * Get real-time daily summary directly from Jira
-     */
-    public Map<String, Object> getDailySummaryRealTime() {
-        log.info("=== STARTING REAL-TIME DAILY SUMMARY ===");
-        Map<String, Object> summary = new HashMap<>();
-        
+    @Autowired
+    private EmailService emailService;
+    
+    public void syncIssuesFromJira() {
+        log.info("Starting Jira sync...");
         try {
-            // Use the injected JQL filter instead of System.getenv()
-            String currentJqlFilter = jiraApiService.getJqlFilter();
-            log.info("Using injected JQL filter for real-time: '{}'", currentJqlFilter);
+            List<JiraIssue> issues = jiraApiService.fetchIssues();
+            log.info("Fetched {} issues from Jira", issues.size());
             
-            // Test direct Jira API call first
-            log.info("Testing direct Jira API call with JQL: {}", currentJqlFilter);
-            List<JiraIssue> testIssues = jiraApiService.fetchIssuesByJQL(currentJqlFilter);
-            log.info("Direct API call returned {} issues", testIssues.size());
-            
-            if (!testIssues.isEmpty()) {
-                log.info("Sample issue from direct call: {}", testIssues.get(0).getIssueKey());
+            for (JiraIssue issue : issues) {
+                jiraIssueRepository.save(issue);
             }
             
-            // Now proceed with the real-time summary
-            List<JiraIssue> issues = testIssues; // Use the test results
-            log.info("Using {} issues for real-time summary", issues.size());
-            
-            // Get current date
-            LocalDateTime today = LocalDateTime.now();
-            LocalDateTime yesterday = today.minusDays(1);
-            
-            // Status breakdown
-            Map<IssueStatus, Long> statusCounts = issues.stream()
-                    .collect(Collectors.groupingBy(JiraIssue::getStatus, Collectors.counting()));
-            summary.put("statusBreakdown", statusCounts);
-            log.info("Status breakdown: {}", statusCounts);
-            
-            // Issues by assignee
-            Map<String, Long> assigneeCounts = issues.stream()
-                    .collect(Collectors.groupingBy(JiraIssue::getAssignee, Collectors.counting()));
-            summary.put("assigneeBreakdown", assigneeCounts);
-            log.info("Assignee breakdown: {}", assigneeCounts);
-            
-            // Recently updated issues
-            List<JiraIssue> recentlyUpdated = issues.stream()
-                    .filter(issue -> issue.getUpdated() != null && issue.getUpdated().isAfter(yesterday))
-                    .sorted(Comparator.comparing(JiraIssue::getUpdated).reversed())
-                    .collect(Collectors.toList());
-            summary.put("recentlyUpdated", recentlyUpdated);
-            log.info("Recently updated issues: {}", recentlyUpdated.size());
-            
-            // Overdue issues
-            List<JiraIssue> overdueIssues = issues.stream()
-                    .filter(issue -> issue.getDueDate() != null && issue.getDueDate().isBefore(today))
-                    .collect(Collectors.toList());
-            summary.put("overdueIssues", overdueIssues);
-            log.info("Overdue issues: {}", overdueIssues.size());
-            
-            // Project breakdown
-            Map<String, Long> projectCounts = issues.stream()
-                    .collect(Collectors.groupingBy(JiraIssue::getProjectKey, Collectors.counting()));
-            summary.put("projectBreakdown", projectCounts);
-            log.info("Project breakdown: {}", projectCounts);
-            
-            // Sprint summary
-            Map<String, Object> sprintSummary = getSprintSummaryRealTime(issues);
-            summary.put("sprintSummary", sprintSummary);
-            
-            summary.put("lastSyncTime", LocalDateTime.now());
-            summary.put("totalIssues", issues.size());
-            summary.put("dataSource", "Real-time from Jira");
-            summary.put("jqlFilter", currentJqlFilter);
-            
-            log.info("=== REAL-TIME DAILY SUMMARY COMPLETED ===");
-            return summary;
-            
+            log.info("Successfully synced {} issues to database", issues.size());
         } catch (Exception e) {
-            log.error("Error in real-time daily summary", e);
-            throw new RuntimeException("Failed to get real-time daily summary", e);
+            log.error("Error syncing issues from Jira", e);
         }
     }
     
-    /**
-     * Get real-time team member summary directly from Jira
-     */
-    public Map<String, Object> getTeamMemberSummaryRealTime(String assignee) {
-        log.info("=== STARTING REAL-TIME TEAM MEMBER SUMMARY FOR: {} ===", assignee);
+    public Map<String, Object> getDailySummary() {
         Map<String, Object> summary = new HashMap<>();
         
-        try {
-            String currentJqlFilter = jiraApiService.getJqlFilter();
-            log.info("Using injected JQL filter for real-time team member: '{}'", currentJqlFilter);
-            
-            List<JiraIssue> allIssues = jiraApiService.fetchIssuesByJQL(currentJqlFilter);
-            log.info("Fetched {} total issues from Jira API for team member summary", allIssues.size());
-            
-            // Filter issues for the specific assignee
-            List<JiraIssue> assigneeIssues = allIssues.stream()
-                    .filter(issue -> assignee.equals(issue.getAssignee()))
-                    .collect(Collectors.toList());
-            
-            log.info("Found {} issues for assignee: {}", assigneeIssues.size(), assignee);
-            
-            // Status breakdown for this assignee
-            Map<IssueStatus, Long> statusCounts = assigneeIssues.stream()
-                    .collect(Collectors.groupingBy(JiraIssue::getStatus, Collectors.counting()));
-            summary.put("statusBreakdown", statusCounts);
-            
-            // Project breakdown for this assignee
-            Map<String, Long> projectCounts = assigneeIssues.stream()
-                    .collect(Collectors.groupingBy(JiraIssue::getProjectKey, Collectors.counting()));
-            summary.put("projectBreakdown", projectCounts);
-            
-            // Recently updated issues for this assignee
-            LocalDateTime yesterday = LocalDateTime.now().minusDays(1);
-            List<JiraIssue> recentlyUpdated = assigneeIssues.stream()
-                    .filter(issue -> issue.getUpdated() != null && issue.getUpdated().isAfter(yesterday))
-                    .sorted(Comparator.comparing(JiraIssue::getUpdated).reversed())
-                    .collect(Collectors.toList());
-            summary.put("recentlyUpdated", recentlyUpdated);
-            
-            // Overdue issues for this assignee
-            LocalDateTime today = LocalDateTime.now();
-            List<JiraIssue> overdueIssues = assigneeIssues.stream()
-                    .filter(issue -> issue.getDueDate() != null && issue.getDueDate().isBefore(today))
-                    .collect(Collectors.toList());
-            summary.put("overdueIssues", overdueIssues);
-            
-            summary.put("assignee", assignee);
-            summary.put("totalIssues", assigneeIssues.size());
-            summary.put("lastSyncTime", LocalDateTime.now());
-            summary.put("dataSource", "Real-time from Jira");
-            summary.put("jqlFilter", currentJqlFilter);
-            
-            log.info("=== REAL-TIME TEAM MEMBER SUMMARY COMPLETED FOR: {} ===", assignee);
-            return summary;
-            
-        } catch (Exception e) {
-            log.error("Error in real-time team member summary for: {}", assignee, e);
-            throw new RuntimeException("Failed to get real-time team member summary for: " + assignee, e);
-        }
+        // Get current date
+        LocalDateTime today = LocalDateTime.now();
+        LocalDateTime yesterday = today.minusDays(1);
+        
+        // Status breakdown
+        Map<IssueStatus, Long> statusCounts = getStatusBreakdown();
+        summary.put("statusBreakdown", statusCounts);
+        
+        // Issues by assignee
+        Map<String, Long> assigneeCounts = getAssigneeBreakdown();
+        summary.put("assigneeBreakdown", assigneeCounts);
+        
+        // Recently updated issues
+        List<JiraIssue> recentlyUpdated = jiraIssueRepository.findRecentlyUpdated(yesterday);
+        summary.put("recentlyUpdated", recentlyUpdated);
+        
+        // Overdue issues
+        List<JiraIssue> overdueIssues = jiraIssueRepository.findOverdueIssues(today);
+        summary.put("overdueIssues", overdueIssues);
+        
+        // Issues moved to different statuses
+        Map<String, Object> statusChanges = getStatusChanges(yesterday);
+        summary.put("statusChanges", statusChanges);
+        
+        // Project breakdown
+        Map<String, Long> projectCounts = getProjectBreakdown();
+        summary.put("projectBreakdown", projectCounts);
+        
+        // Sprint summary
+        Map<String, Object> sprintSummary = getSprintSummary();
+        summary.put("sprintSummary", sprintSummary);
+        
+        summary.put("lastSyncTime", LocalDateTime.now());
+        summary.put("totalIssues", jiraIssueRepository.count());
+        
+        return summary;
     }
     
-    /**
-     * Get real-time project summary directly from Jira
-     */
-    public Map<String, Object> getProjectSummaryRealTime(String projectKey) {
-        log.info("=== STARTING REAL-TIME PROJECT SUMMARY FOR: {} ===", projectKey);
+    public Map<String, Object> getTeamMemberSummary(String assignee) {
         Map<String, Object> summary = new HashMap<>();
         
-        try {
-            String currentJqlFilter = jiraApiService.getJqlFilter();
-            log.info("Using injected JQL filter for real-time project: '{}'", currentJqlFilter);
-            
-            List<JiraIssue> allIssues = jiraApiService.fetchIssuesByJQL(currentJqlFilter);
-            log.info("Fetched {} total issues from Jira API for project summary", allIssues.size());
-            
-            // Filter issues for the specific project
-            List<JiraIssue> projectIssues = allIssues.stream()
-                    .filter(issue -> projectKey.equals(issue.getProjectKey()))
-                    .collect(Collectors.toList());
-            
-            log.info("Found {} issues for project: {}", projectIssues.size(), projectKey);
-            
-            // Status breakdown for this project
-            Map<IssueStatus, Long> statusCounts = projectIssues.stream()
-                    .collect(Collectors.groupingBy(JiraIssue::getStatus, Collectors.counting()));
-            summary.put("statusBreakdown", statusCounts);
-            
-            // Assignee breakdown for this project
-            Map<String, Long> assigneeCounts = projectIssues.stream()
-                    .collect(Collectors.groupingBy(JiraIssue::getAssignee, Collectors.counting()));
-            summary.put("assigneeBreakdown", assigneeCounts);
-            
-            // Recently updated issues for this project
-            LocalDateTime yesterday = LocalDateTime.now().minusDays(1);
-            List<JiraIssue> recentlyUpdated = projectIssues.stream()
-                    .filter(issue -> issue.getUpdated() != null && issue.getUpdated().isAfter(yesterday))
-                    .sorted(Comparator.comparing(JiraIssue::getUpdated).reversed())
-                    .collect(Collectors.toList());
-            summary.put("recentlyUpdated", recentlyUpdated);
-            
-            // Overdue issues for this project
-            LocalDateTime today = LocalDateTime.now();
-            List<JiraIssue> overdueIssues = projectIssues.stream()
-                    .filter(issue -> issue.getDueDate() != null && issue.getDueDate().isBefore(today))
-                    .collect(Collectors.toList());
-            summary.put("overdueIssues", overdueIssues);
-            
-            summary.put("projectKey", projectKey);
-            summary.put("totalIssues", projectIssues.size());
-            summary.put("lastSyncTime", LocalDateTime.now());
-            summary.put("dataSource", "Real-time from Jira");
-            summary.put("jqlFilter", currentJqlFilter);
-            
-            log.info("=== REAL-TIME PROJECT SUMMARY COMPLETED FOR: {} ===", projectKey);
-            return summary;
-            
-        } catch (Exception e) {
-            log.error("Error in real-time project summary for: {}", projectKey, e);
-            throw new RuntimeException("Failed to get real-time project summary for: " + projectKey, e);
-        }
+        List<IssueStatus> activeStatuses = Arrays.asList(
+            IssueStatus.IN_PROGRESS, 
+            IssueStatus.IN_REVIEW, 
+            IssueStatus.IN_QA, 
+            IssueStatus.QA_PASSED,
+            IssueStatus.IN_UAT
+        );
+        
+        List<JiraIssue> activeIssues = jiraIssueRepository.findByAssigneeAndStatusIn(assignee, activeStatuses);
+        summary.put("activeIssues", activeIssues);
+        
+        Map<IssueStatus, Long> statusCounts = activeIssues.stream()
+                .collect(Collectors.groupingBy(JiraIssue::getStatus, Collectors.counting()));
+        summary.put("statusCounts", statusCounts);
+        
+        List<JiraIssue> overdueIssues = jiraIssueRepository.findOverdueIssuesByAssignee(assignee, LocalDateTime.now());
+        summary.put("overdueIssues", overdueIssues);
+        
+        return summary;
     }
     
-    /**
-     * Get real-time sprint summary directly from Jira
-     */
-    private Map<String, Object> getSprintSummaryRealTime(List<JiraIssue> issues) {
+    public Map<String, Object> getProjectSummary(String projectKey) {
+        Map<String, Object> summary = new HashMap<>();
+        
+        List<IssueStatus> activeStatuses = Arrays.asList(
+            IssueStatus.IN_PROGRESS, 
+            IssueStatus.IN_REVIEW, 
+            IssueStatus.IN_QA, 
+            IssueStatus.QA_PASSED,
+            IssueStatus.IN_UAT
+        );
+        
+        List<JiraIssue> projectIssues = jiraIssueRepository.findByProjectKeyAndStatusIn(projectKey, activeStatuses);
+        summary.put("projectIssues", projectIssues);
+        
+        Map<IssueStatus, Long> statusCounts = projectIssues.stream()
+                .collect(Collectors.groupingBy(JiraIssue::getStatus, Collectors.counting()));
+        summary.put("statusCounts", statusCounts);
+        
+        Map<String, Long> assigneeCounts = projectIssues.stream()
+                .collect(Collectors.groupingBy(JiraIssue::getAssignee, Collectors.counting()));
+        summary.put("assigneeCounts", assigneeCounts);
+        
+        return summary;
+    }
+    
+    private Map<IssueStatus, Long> getStatusBreakdown() {
+        return jiraIssueRepository.findAll().stream()
+                .collect(Collectors.groupingBy(JiraIssue::getStatus, Collectors.counting()));
+    }
+    
+    private Map<String, Long> getAssigneeBreakdown() {
+        return jiraIssueRepository.findAll().stream()
+                .collect(Collectors.groupingBy(JiraIssue::getAssignee, Collectors.counting()));
+    }
+    
+    private Map<String, Long> getProjectBreakdown() {
+        return jiraIssueRepository.findAll().stream()
+                .collect(Collectors.groupingBy(JiraIssue::getProjectKey, Collectors.counting()));
+    }
+    
+    private Map<String, Object> getStatusChanges(LocalDateTime since) {
+        Map<String, Object> changes = new HashMap<>();
+        
+        // This would require tracking status changes over time
+        // For now, return empty map
+        changes.put("movedToInProgress", 0);
+        changes.put("movedToQA", 0);
+        changes.put("movedToUAT", 0);
+        changes.put("completed", 0);
+        
+        return changes;
+    }
+    
+    private Map<String, Object> getSprintSummary() {
         Map<String, Object> sprintSummary = new HashMap<>();
         
-        try {
-            // Group issues by sprint
-            Map<String, List<JiraIssue>> sprintIssues = issues.stream()
-                    .filter(issue -> issue.getSprint() != null && !issue.getSprint().isEmpty())
-                    .collect(Collectors.groupingBy(JiraIssue::getSprint));
+        // Group issues by sprint
+        Map<String, List<JiraIssue>> sprintIssues = jiraIssueRepository.findAll().stream()
+                .filter(issue -> issue.getSprint() != null && !issue.getSprint().isEmpty())
+                .collect(Collectors.groupingBy(JiraIssue::getSprint));
+        
+        sprintSummary.put("sprintIssues", sprintIssues);
+        
+        // Calculate sprint metrics
+        Map<String, Map<String, Object>> sprintMetrics = new HashMap<>();
+        for (Map.Entry<String, List<JiraIssue>> entry : sprintIssues.entrySet()) {
+            String sprint = entry.getKey();
+            List<JiraIssue> issues = entry.getValue();
             
-            // Calculate sprint metrics
-            Map<String, Object> sprintMetrics = new HashMap<>();
-            for (Map.Entry<String, List<JiraIssue>> entry : sprintIssues.entrySet()) {
-                String sprintName = entry.getKey();
-                List<JiraIssue> sprintIssuesList = entry.getValue();
-                
-                Map<String, Object> metrics = new HashMap<>();
-                metrics.put("totalIssues", sprintIssuesList.size());
-                metrics.put("toDoIssues", sprintIssuesList.stream()
-                        .filter(issue -> IssueStatus.TO_DO.equals(issue.getStatus()))
-                        .count());
-                metrics.put("inProgressIssues", sprintIssuesList.stream()
-                        .filter(issue -> IssueStatus.IN_PROGRESS.equals(issue.getStatus()))
-                        .count());
-                metrics.put("doneIssues", sprintIssuesList.stream()
-                        .filter(issue -> IssueStatus.DONE.equals(issue.getStatus()))
-                        .count());
-                
-                sprintMetrics.put(sprintName, metrics);
-            }
+            Map<String, Object> metrics = new HashMap<>();
+            metrics.put("totalIssues", issues.size());
+            metrics.put("completedIssues", issues.stream()
+                    .filter(issue -> issue.getStatus() == IssueStatus.DONE || issue.getStatus() == IssueStatus.CLOSED)
+                    .count());
+            metrics.put("inProgressIssues", issues.stream()
+                    .filter(issue -> issue.getStatus() == IssueStatus.IN_PROGRESS)
+                    .count());
+            metrics.put("qaIssues", issues.stream()
+                    .filter(issue -> issue.getStatus() == IssueStatus.IN_QA || issue.getStatus() == IssueStatus.QA_PASSED)
+                    .count());
             
-            sprintSummary.put("sprintIssues", sprintIssues);
-            sprintSummary.put("sprintMetrics", sprintMetrics);
-            
-        } catch (Exception e) {
-            log.error("Error calculating sprint summary", e);
-            sprintSummary.put("error", "Failed to calculate sprint summary: " + e.getMessage());
+            sprintMetrics.put(sprint, metrics);
         }
         
+        sprintSummary.put("sprintMetrics", sprintMetrics);
         return sprintSummary;
     }
     
-    /**
-     * Get real-time employee scrum summary directly from Jira
-     */
-    public Map<String, Object> getEmployeeScrumSummaryRealTime(String assignee) {
-        log.info("=== STARTING REAL-TIME EMPLOYEE SCRUM SUMMARY FOR: {} ===", assignee);
+    public Map<String, Object> getEmployeeScrumSummary(String assignee) {
         Map<String, Object> summary = new HashMap<>();
         
+        // Get all issues for this employee
+        List<JiraIssue> allIssues = jiraIssueRepository.findByAssignee(assignee);
+        
+        // Group by status
+        Map<IssueStatus, List<JiraIssue>> issuesByStatus = allIssues.stream()
+                .collect(Collectors.groupingBy(JiraIssue::getStatus));
+        
+        // What I worked on yesterday (issues updated in last 24 hours)
+        LocalDateTime yesterday = LocalDateTime.now().minusDays(1);
+        List<JiraIssue> recentlyWorkedOn = allIssues.stream()
+                .filter(issue -> issue.getUpdated() != null && issue.getUpdated().isAfter(yesterday))
+                .sorted(Comparator.comparing(JiraIssue::getUpdated).reversed())
+                .collect(Collectors.toList());
+        
+        // What I'm working on today (in progress issues)
+        List<JiraIssue> workingOnToday = issuesByStatus.getOrDefault(IssueStatus.IN_PROGRESS, new ArrayList<>());
+        
+        // What I plan to work on next (to do issues)
+        List<JiraIssue> plannedForNext = issuesByStatus.getOrDefault(IssueStatus.TO_DO, new ArrayList<>());
+        
+        // Blockers/Issues
+        List<JiraIssue> blockers = allIssues.stream()
+                .filter(issue -> issue.getStatus() == IssueStatus.BLOCKED || issue.getStatus() == IssueStatus.ON_HOLD)
+                .collect(Collectors.toList());
+        
+        // Completed today (moved to done in last 24 hours)
+        List<JiraIssue> completedToday = allIssues.stream()
+                .filter(issue -> (issue.getStatus() == IssueStatus.DONE || issue.getStatus() == IssueStatus.CLOSED) &&
+                               issue.getUpdated() != null && issue.getUpdated().isAfter(yesterday))
+                .collect(Collectors.toList());
+        
+        // Overdue issues
+        List<JiraIssue> overdueIssues = jiraIssueRepository.findOverdueIssuesByAssignee(assignee, LocalDateTime.now());
+        
+        // Story points summary
+        int totalStoryPoints = allIssues.stream()
+                .filter(issue -> issue.getStoryPoints() != null)
+                .mapToInt(JiraIssue::getStoryPoints)
+                .sum();
+        
+        int completedStoryPoints = completedToday.stream()
+                .filter(issue -> issue.getStoryPoints() != null)
+                .mapToInt(JiraIssue::getStoryPoints)
+                .sum();
+        
+        summary.put("assignee", assignee);
+        summary.put("allIssues", allIssues);
+        summary.put("issuesByStatus", issuesByStatus);
+        summary.put("recentlyWorkedOn", recentlyWorkedOn);
+        summary.put("workingOnToday", workingOnToday);
+        summary.put("plannedForNext", plannedForNext);
+        summary.put("blockers", blockers);
+        summary.put("completedToday", completedToday);
+        summary.put("overdueIssues", overdueIssues);
+        summary.put("totalStoryPoints", totalStoryPoints);
+        summary.put("completedStoryPoints", completedStoryPoints);
+        summary.put("totalIssues", allIssues.size());
+        summary.put("completedIssues", completedToday.size());
+        
+        return summary;
+    }
+    
+    public Map<String, Object> getAllEmployeesScrumSummary() {
+        Map<String, Object> summary = new HashMap<>();
+        
+        // Get all unique assignees
+        List<String> allAssignees = jiraIssueRepository.findAll().stream()
+                .map(JiraIssue::getAssignee)
+                .filter(assignee -> !assignee.equals("Unassigned"))
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+        
+        // Get summary for each employee
+        Map<String, Map<String, Object>> employeeSummaries = new HashMap<>();
+        for (String assignee : allAssignees) {
+            employeeSummaries.put(assignee, getEmployeeScrumSummary(assignee));
+        }
+        
+        summary.put("employees", employeeSummaries);
+        summary.put("totalEmployees", allAssignees.size());
+        summary.put("employeeList", allAssignees);
+        
+        return summary;
+    }
+    
+    public JiraIssueRepository getJiraIssueRepository() {
+        return jiraIssueRepository;
+    }
+
+    @Scheduled(cron = "${app.daily-summary.cron}")
+    public void sendDailySummary() {
+        log.info("Sending daily summary...");
         try {
-            String currentJqlFilter = jiraApiService.getJqlFilter();
-            log.info("Using injected JQL filter for real-time employee scrum: '{}'", currentJqlFilter);
-            
-            List<JiraIssue> allIssues = jiraApiService.fetchIssuesByJQL(currentJqlFilter);
-            log.info("Fetched {} total issues from Jira API for employee scrum summary", allIssues.size());
-            
-            // Filter issues for the specific assignee
-            List<JiraIssue> assigneeIssues = allIssues.stream()
-                    .filter(issue -> assignee.equals(issue.getAssignee()))
-                    .collect(Collectors.toList());
-            
-            log.info("Found {} issues for assignee: {}", assigneeIssues.size(), assignee);
-            
-            // Calculate scrum metrics
-            long totalIssues = assigneeIssues.size();
-            long toDoIssues = assigneeIssues.stream()
-                    .filter(issue -> IssueStatus.TO_DO.equals(issue.getStatus()))
-                    .count();
-            long inProgressIssues = assigneeIssues.stream()
-                    .filter(issue -> IssueStatus.IN_PROGRESS.equals(issue.getStatus()))
-                    .count();
-            long doneIssues = assigneeIssues.stream()
-                    .filter(issue -> IssueStatus.DONE.equals(issue.getStatus()))
-                    .count();
-            long blockedIssues = assigneeIssues.stream()
-                    .filter(issue -> IssueStatus.BLOCKED.equals(issue.getStatus()))
-                    .count();
-            
-            // Calculate completion percentage
-            double completionPercentage = totalIssues > 0 ? (double) doneIssues / totalIssues * 100 : 0;
-            
-            summary.put("assignee", assignee);
-            summary.put("totalIssues", totalIssues);
-            summary.put("toDoIssues", toDoIssues);
-            summary.put("inProgressIssues", inProgressIssues);
-            summary.put("doneIssues", doneIssues);
-            summary.put("blockedIssues", blockedIssues);
-            summary.put("completionPercentage", Math.round(completionPercentage * 100.0) / 100.0);
-            summary.put("lastSyncTime", LocalDateTime.now());
-            summary.put("dataSource", "Real-time from Jira");
-            summary.put("jqlFilter", currentJqlFilter);
-            
-            log.info("=== REAL-TIME EMPLOYEE SCRUM SUMMARY COMPLETED FOR: {} ===", assignee);
-            return summary;
-            
+            Map<String, Object> summary = getDailySummary();
+            emailService.sendDailySummary(summary);
+            log.info("Daily summary sent successfully");
         } catch (Exception e) {
-            log.error("Error in real-time employee scrum summary for: {}", assignee, e);
-            throw new RuntimeException("Failed to get real-time employee scrum summary for: " + assignee, e);
+            log.error("Error sending daily summary", e);
         }
     }
     
-    /**
-     * Get real-time all employees scrum summary directly from Jira
-     */
-    public Map<String, Object> getAllEmployeesScrumSummaryRealTime() {
-        log.info("=== STARTING REAL-TIME ALL EMPLOYEES SCRUM SUMMARY ===");
-        Map<String, Object> summary = new HashMap<>();
-        
-        try {
-            String currentJqlFilter = jiraApiService.getJqlFilter();
-            log.info("Using injected JQL filter for real-time all employees scrum: '{}'", currentJqlFilter);
-            
-            List<JiraIssue> allIssues = jiraApiService.fetchIssuesByJQL(currentJqlFilter);
-            log.info("Fetched {} total issues from Jira API for all employees scrum summary", allIssues.size());
-            
-            // Get unique assignees
-            Set<String> assignees = allIssues.stream()
-                    .map(JiraIssue::getAssignee)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toSet());
-            
-            log.info("Found {} unique assignees", assignees.size());
-            
-            // Calculate scrum summary for each assignee
-            Map<String, Object> employeeSummaries = new HashMap<>();
-            for (String assignee : assignees) {
-                Map<String, Object> employeeSummary = getEmployeeScrumSummaryRealTime(assignee);
-                employeeSummaries.put(assignee, employeeSummary);
-            }
-            
-            summary.put("employeeSummaries", employeeSummaries);
-            summary.put("totalEmployees", assignees.size());
-            summary.put("totalIssues", allIssues.size());
-            summary.put("lastSyncTime", LocalDateTime.now());
-            summary.put("dataSource", "Real-time from Jira");
-            summary.put("jqlFilter", currentJqlFilter);
-            
-            log.info("=== REAL-TIME ALL EMPLOYEES SCRUM SUMMARY COMPLETED ===");
-            return summary;
-            
-        } catch (Exception e) {
-            log.error("Error in real-time all employees scrum summary", e);
-            throw new RuntimeException("Failed to get real-time all employees scrum summary", e);
-        }
-    }
-    
-    // ===== UTILITY METHODS =====
-    
-    /**
-     * Get JiraApiService instance
-     */
-    public JiraApiService getJiraApiService() {
-        return jiraApiService;
+    @Scheduled(fixedRate = 300000) // Every 5 minutes
+    public void autoSyncIssues() {
+        log.info("Auto-syncing issues from Jira...");
+        syncIssuesFromJira();
     }
 } 
