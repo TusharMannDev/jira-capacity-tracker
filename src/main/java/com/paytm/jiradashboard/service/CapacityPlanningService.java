@@ -46,6 +46,13 @@ public class CapacityPlanningService {
                 .sorted(Comparator.comparing(TaskAssignment::getEstimatedCompletionDate))
                 .collect(Collectors.toList());
 
+        // Get current Jira issue keys
+        List<String> currentJiraIssues = activeTasks.stream()
+                .map(TaskAssignment::getIssueKey)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
         return TeamCapacitySummary.builder()
                 .memberName(member.getName())
                 .role(member.getRole())
@@ -57,6 +64,7 @@ public class CapacityPlanningService {
                 .upcomingDeadlines(upcomingDeadlines)
                 .isOverloaded(isOverloaded(member, activeTasks))
                 .utilizationPercentage(calculateUtilization(member, activeTasks))
+                .currentJiraIssues(currentJiraIssues)
                 .build();
     }
 
@@ -270,6 +278,7 @@ public class CapacityPlanningService {
         public List<TaskAssignment> upcomingDeadlines;
         public boolean isOverloaded;
         public double utilizationPercentage;
+        public List<String> currentJiraIssues;
 
         public static TeamCapacitySummaryBuilder builder() {
             return new TeamCapacitySummaryBuilder();
@@ -325,6 +334,11 @@ public class CapacityPlanningService {
 
             public TeamCapacitySummaryBuilder utilizationPercentage(double utilizationPercentage) {
                 summary.utilizationPercentage = utilizationPercentage;
+                return this;
+            }
+
+            public TeamCapacitySummaryBuilder currentJiraIssues(List<String> currentJiraIssues) {
+                summary.currentJiraIssues = currentJiraIssues;
                 return this;
             }
 

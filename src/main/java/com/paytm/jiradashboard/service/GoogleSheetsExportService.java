@@ -108,6 +108,7 @@ public class GoogleSheetsExportService {
                             .pod(teamName)
                             .lead(member.getName())
                             .taskType("Available")
+                            .jiraIssueKey("")
                             .currentTask("Available for new assignments")
                             .resource(member.getName())
                             .manDays(0)
@@ -143,6 +144,7 @@ public class GoogleSheetsExportService {
                 .pod(member.getTeam() != null ? member.getTeam() : "Unassigned")
                 .lead(member.getName())
                 .taskType(mapIssueTypeToTaskType(issue.getIssueType()))
+                .jiraIssueKey(issue.getIssueKey())
                 .currentTask(issue.getSummary())
                 .resource(issue.getAssignee())
                 .manDays(manDays)
@@ -240,7 +242,7 @@ public class GoogleSheetsExportService {
         
         // Add header row
         List<Object> headerRow = new ArrayList<>();
-        headerRow.addAll(Arrays.asList("POD", "Lead", "Task Type", "Current Tasks (In Dev)", "Resource"));
+        headerRow.addAll(Arrays.asList("POD", "Lead", "Task Type", "Jira Issue Key", "Current Tasks (In Dev)", "Resource"));
         
         // Add timeline columns
         for (WeekColumn week : sheet.getTimelineWeeks()) {
@@ -258,6 +260,7 @@ public class GoogleSheetsExportService {
                 dataRow.add(row.getPod());
                 dataRow.add(row.getLead());
                 dataRow.add(row.getTaskType());
+                dataRow.add(row.getJiraIssueKey());
                 dataRow.add(row.getCurrentTask());
                 dataRow.add(row.getResource());
                 
@@ -390,6 +393,7 @@ public class GoogleSheetsExportService {
         public String pod;
         public String lead;
         public String taskType;
+        public String jiraIssueKey;
         public String currentTask;
         public String resource;
         public int manDays;
@@ -418,6 +422,11 @@ public class GoogleSheetsExportService {
 
             public CapacityRowBuilder taskType(String taskType) {
                 row.taskType = taskType;
+                return this;
+            }
+
+            public CapacityRowBuilder jiraIssueKey(String jiraIssueKey) {
+                row.jiraIssueKey = jiraIssueKey;
                 return this;
             }
 
@@ -470,6 +479,7 @@ public class GoogleSheetsExportService {
         public String getPod() { return pod; }
         public String getLead() { return lead; }
         public String getTaskType() { return taskType; }
+        public String getJiraIssueKey() { return jiraIssueKey; }
         public String getCurrentTask() { return currentTask; }
         public String getResource() { return resource; }
         public int getManDays() { return manDays; }
