@@ -8,6 +8,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
@@ -55,9 +56,18 @@ public class GoogleSheetsController {
     }
 
     @GetMapping("/export-capacity-data")
-    public ResponseEntity<List<List<Object>>> exportCapacityData() {
+    public ResponseEntity<List<List<Object>>> exportCapacityData(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
         try {
-            List<List<Object>> data = sheetsService.exportCapacityData();
+            List<List<Object>> data;
+            if (startDate != null && endDate != null) {
+                LocalDate start = LocalDate.parse(startDate);
+                LocalDate end = LocalDate.parse(endDate);
+                data = sheetsService.exportCapacityDataByDateRange(start, end);
+            } else {
+                data = sheetsService.exportCapacityData();
+            }
             return ResponseEntity.ok(data);
         } catch (Exception e) {
             log.error("Error exporting capacity data", e);
@@ -66,9 +76,18 @@ public class GoogleSheetsController {
     }
 
     @GetMapping("/export-capacity-csv")
-    public ResponseEntity<String> exportCapacityDataAsCsv() {
+    public ResponseEntity<String> exportCapacityDataAsCsv(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
         try {
-            List<List<Object>> data = sheetsService.exportCapacityData();
+            List<List<Object>> data;
+            if (startDate != null && endDate != null) {
+                LocalDate start = LocalDate.parse(startDate);
+                LocalDate end = LocalDate.parse(endDate);
+                data = sheetsService.exportCapacityDataByDateRange(start, end);
+            } else {
+                data = sheetsService.exportCapacityData();
+            }
             String csvContent = convertToCsv(data);
             
             HttpHeaders headers = new HttpHeaders();
@@ -86,21 +105,35 @@ public class GoogleSheetsController {
     }
 
     @GetMapping("/preview-capacity-data")
-    public ResponseEntity<Map<String, Object>> previewCapacityData() {
+    public ResponseEntity<Map<String, Object>> previewCapacityData(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
         try {
-            List<List<Object>> data = sheetsService.exportCapacityData();
-            Map<String, Object> summary = sheetsService.getSheetSummary();
+            List<List<Object>> data;
+            Map<String, Object> summary;
             
-            // Return first 10 rows for preview
+            if (startDate != null && endDate != null) {
+                LocalDate start = LocalDate.parse(startDate);
+                LocalDate end = LocalDate.parse(endDate);
+                data = sheetsService.exportCapacityDataByDateRange(start, end);
+                summary = sheetsService.getSheetSummaryByDateRange(start, end);
+            } else {
+                data = sheetsService.exportCapacityData();
+                summary = sheetsService.getSheetSummary();
+            }
+            
+            // Return first 50 rows for preview
             List<List<Object>> preview = data.stream()
-                    .limit(10)
+                    .limit(50)
                     .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
             
             Map<String, Object> response = Map.of(
                     "summary", summary,
                     "preview", preview,
                     "totalRows", data.size(),
-                    "previewRows", preview.size()
+                    "previewRows", preview.size(),
+                    "dateRange", startDate != null && endDate != null ? 
+                        Map.of("startDate", startDate, "endDate", endDate) : "All data"
             );
             
             return ResponseEntity.ok(response);

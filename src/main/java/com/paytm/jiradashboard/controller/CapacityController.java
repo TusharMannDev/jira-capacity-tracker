@@ -3,12 +3,15 @@ package com.paytm.jiradashboard.controller;
 import com.paytm.jiradashboard.model.*;
 import com.paytm.jiradashboard.repository.*;
 import com.paytm.jiradashboard.service.CapacityPlanningService;
+import com.paytm.jiradashboard.service.JiraApiService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -22,6 +25,7 @@ public class CapacityController {
     private final CapacityPlanningService capacityPlanningService;
     private final TeamMemberRepository teamMemberRepository;
     private final TaskAssignmentRepository taskAssignmentRepository;
+    private final JiraApiService jiraApiService;
     
     @GetMapping("/team-summary")
     public ResponseEntity<List<CapacityPlanningService.TeamCapacitySummary>> getTeamCapacitySummary() {
@@ -209,6 +213,84 @@ public class CapacityController {
         } catch (Exception e) {
             log.error("Error getting team stats", e);
             return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    @GetMapping("/jiras-by-date-range")
+    public ResponseEntity<Map<String, Object>> getJirasByDateRange(
+            @RequestParam String startDate,
+            @RequestParam String endDate) {
+        try {
+            // Parse the input dates
+            LocalDate start = LocalDate.parse(startDate);
+            LocalDate end = LocalDate.parse(endDate);
+            
+            // Validation 1: Start date should be before or equal to end date
+            if (start.isAfter(end)) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "status", "error",
+                    "message", "Start date must be before or equal to end date"
+                ));
+            }
+            
+            // Validation 2: Date range should not exceed 6 months (approximately 180 days)
+            long daysBetween = ChronoUnit.DAYS.between(start, end);
+            if (daysBetween > 180) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "status", "error",
+                    "message", "Date range cannot exceed 6 months (180 days). Current range: " + daysBetween + " days"
+                ));
+            }
+            
+            // Validation 3: Dates should not be in the future beyond reasonable limits
+            LocalDate maxFutureDate = LocalDate.now().plusMonths(12);
+            if (end.isAfter(maxFutureDate)) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "status", "error",
+                    "message", "End date cannot be more than 12 months in the future"
+                ));
+            }
+            
+            log.info("Fetching Jiras from {} to {} (total {} days)", start, end, daysBetween);
+            
+            // Fetch issues from Jira API
+            List<JiraIssue> issues = jiraApiService.fetchIssuesByDateRange(start, end);
+            
+            // Prepare response with metadata
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "success");
+            response.put("startDate", start.toString());
+            response.put("endDate", end.toString());
+            response.put("totalDays", daysBetween);
+            response.put("totalIssues", issues.size());
+            response.put("maxLimit", 5000);
+            response.put("limitReached", issues.size() >= 5000);
+            response.put("issues", issues);
+            
+            if (issues.size() >= 5000) {
+                response.put("warning", "Maximum limit of 5000 issues reached. Results may be incomplete.");
+            }
+            
+            log.info("Successfully fetched {} Jira issues for date range {} to {}", 
+                    issues.size(), start, end);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("Error fetching Jiras by date range", e);
+            
+            // Handle specific parsing errors
+            if (e instanceof java.time.format.DateTimeParseException) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "status", "error",
+                    "message", "Invalid date format. Please use YYYY-MM-DD format (e.g., 2024-01-15)"
+                ));
+            }
+            
+            return ResponseEntity.internalServerError().body(Map.of(
+                "status", "error",
+                "message", "Failed to fetch Jiras: " + e.getMessage()
+            ));
         }
     }
 }

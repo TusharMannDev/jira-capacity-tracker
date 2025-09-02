@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -97,6 +98,53 @@ public class JiraApiService {
             
         } catch (Exception e) {
             log.error("Error fetching issues from Jira with custom JQL", e);
+        }
+        
+        return new ArrayList<>();
+    }
+    
+    public List<JiraIssue> fetchIssuesByDateRange(LocalDate startDate, LocalDate endDate) {
+        try {
+            log.info("Fetching issues from Jira between {} and {}", startDate, endDate);
+            
+            // Build JQL query combining environment filter with date range
+            String baseJql = jqlFilter.replace(" ORDER BY priority DESC, status ASC, issuetype ASC", "");
+            String dateRangeJql = String.format(
+                "(%s) AND created >= '%s' AND created <= '%s' ORDER BY created DESC", 
+                baseJql,
+                startDate.toString(), 
+                endDate.toString()
+            );
+            
+            log.info("Using JQL query: {}", dateRangeJql);
+            
+            String url = UriComponentsBuilder
+                    .fromHttpUrl(jiraBaseUrl + "/rest/api/2/search")
+                    .queryParam("jql", dateRangeJql)
+                    .queryParam("maxResults", 5000) // Set max limit to 5000 as requested
+                    .queryParam("fields", "summary,description,status,issuetype,assignee,reporter,project,priority,created,updated,resolutiondate,duedate,customfield_10016,labels,components,customfield_10020,customfield_10014")
+                    .build()
+                    .toUriString();
+            
+            HttpHeaders headers = createAuthHeaders();
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
+            
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Map<String, Object> responseBody = response.getBody();
+                List<Map<String, Object>> issues = (List<Map<String, Object>>) responseBody.get("issues");
+                
+                log.info("Fetched {} issues from Jira for date range {} to {}", 
+                        issues.size(), startDate, endDate);
+                
+                return issues.stream()
+                        .map(this::mapToJiraIssue)
+                        .collect(Collectors.toList());
+            }
+            
+        } catch (Exception e) {
+            log.error("Error fetching issues from Jira by date range", e);
         }
         
         return new ArrayList<>();

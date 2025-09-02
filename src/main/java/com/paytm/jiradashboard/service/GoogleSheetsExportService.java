@@ -44,6 +44,60 @@ public class GoogleSheetsExportService {
                 .teamData(groupedData)
                 .build();
     }
+    
+    public CapacityTrackingSheet generateCapacityTrackingSheetByDateRange(LocalDate startDate, LocalDate endDate) {
+        log.info("Generating capacity tracking sheet from Jira data for date range: {} to {}", startDate, endDate);
+        
+        // Define the list of specific team members to include
+        List<String> targetMembers = Arrays.asList(
+            "Srivastava, Praharsh", "Acharya, Ashutosh", "Puri, Prince1", "Agrawal, Oshi",
+            "Agarwal, Amit Kumar", "Sharma, Abhay6", "Singh, Navjot6", "Mittal, Pratham",
+            "Verma, Swati1", "Jaiswal, Anand1", "Yadav Dhruvkant", "Kalsi, Sanya",
+            "Kashif, Syed Mohd", "Verma, Tanish", "Garg, Ankit", "Sharma, siddharth5",
+            "Jain, Mayank5", "Tiiwari, Vineet2", "Jain, Atishay2", "Mann, Tushar", "Kumar, Puneet6"
+        );
+        
+        // Get issues filtered by date range
+        List<JiraIssue> activeIssues = jiraIssueRepository.findByStatusIn(
+                Arrays.asList(IssueStatus.TO_DO, IssueStatus.IN_PROGRESS, IssueStatus.IN_REVIEW))
+                .stream()
+                .filter(issue -> {
+                    LocalDate createdDate = issue.getCreated().toLocalDate();
+                    return !createdDate.isBefore(startDate) && !createdDate.isAfter(endDate);
+                })
+                .filter(issue -> targetMembers.contains(issue.getAssignee()))
+                .collect(Collectors.toList());
+        
+        // Filter team members for only target members
+        List<TeamMember> teamMembers = teamMemberRepository.findByIsActiveTrue().stream()
+                .filter(member -> targetMembers.contains(member.getName()))
+                .collect(Collectors.toList());
+        
+        // Filter assignments for only target members and date range
+        List<TaskAssignment> assignments = taskAssignmentRepository.findAll().stream()
+                .filter(assignment -> targetMembers.contains(assignment.getAssigneeName()))
+                .filter(assignment -> {
+                    if (assignment.getCreatedAt() != null) {
+                        LocalDate createdDate = assignment.getCreatedAt().toLocalDate();
+                        return !createdDate.isBefore(startDate) && !createdDate.isAfter(endDate);
+                    }
+                    return true; // Include if no creation date
+                })
+                .collect(Collectors.toList());
+        
+        // Generate timeline weeks
+        List<WeekColumn> timelineWeeks = generateTimelineWeeks(12); // Next 12 weeks
+        
+        // Group by POD/Team and Lead
+        Map<String, List<CapacityRow>> groupedData = generateCapacityRows(activeIssues, assignments, teamMembers, timelineWeeks);
+        
+        return CapacityTrackingSheet.builder()
+                .title("OE_Payments_Task_Tracker - Date Filtered (" + startDate + " to " + endDate + ")")
+                .generatedDate(LocalDate.now())
+                .timelineWeeks(timelineWeeks)
+                .teamData(groupedData)
+                .build();
+    }
 
     private List<WeekColumn> generateTimelineWeeks(int weekCount) {
         List<WeekColumn> weeks = new ArrayList<>();

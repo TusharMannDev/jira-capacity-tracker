@@ -6,6 +6,7 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDate;
 import java.util.*;
 
 @Service
@@ -301,6 +302,48 @@ public class GoogleSheetsIntegrationService {
         } catch (Exception e) {
             log.error("Error exporting capacity data", e);
             throw new RuntimeException("Failed to export capacity data", e);
+        }
+    }
+    
+    public List<List<Object>> exportCapacityDataByDateRange(LocalDate startDate, LocalDate endDate) {
+        try {
+            log.info("Exporting capacity data for date range: {} to {}", startDate, endDate);
+            GoogleSheetsExportService.CapacityTrackingSheet sheet = exportService.generateCapacityTrackingSheetByDateRange(startDate, endDate);
+            return exportService.convertToSheetsData(sheet);
+        } catch (Exception e) {
+            log.error("Error exporting capacity data by date range", e);
+            throw new RuntimeException("Failed to export capacity data by date range", e);
+        }
+    }
+    
+    public Map<String, Object> getSheetSummaryByDateRange(LocalDate startDate, LocalDate endDate) {
+        try {
+            log.info("Getting sheet summary for date range: {} to {}", startDate, endDate);
+            GoogleSheetsExportService.CapacityTrackingSheet sheet = exportService.generateCapacityTrackingSheetByDateRange(startDate, endDate);
+            
+            int totalRows = 0;
+            int totalTeams = sheet.getTeamData().size();
+            int totalMembers = sheet.getTeamData().values().stream()
+                    .mapToInt(List::size)
+                    .sum();
+            
+            for (List<GoogleSheetsExportService.CapacityRow> teamRows : sheet.getTeamData().values()) {
+                totalRows += teamRows.size();
+            }
+            
+            return Map.of(
+                    "title", sheet.getTitle(),
+                    "generatedDate", sheet.getGeneratedDate().toString(),
+                    "totalRows", totalRows + 1, // +1 for header
+                    "totalTeams", totalTeams,
+                    "totalMembers", totalMembers,
+                    "timelineWeeks", sheet.getTimelineWeeks().size(),
+                    "dateRange", Map.of("startDate", startDate.toString(), "endDate", endDate.toString()),
+                    "status", "Generated with date filter"
+            );
+        } catch (Exception e) {
+            log.error("Error getting sheet summary by date range", e);
+            throw new RuntimeException("Failed to get sheet summary by date range", e);
         }
     }
 } 
