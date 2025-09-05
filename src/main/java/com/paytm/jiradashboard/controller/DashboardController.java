@@ -19,7 +19,7 @@ public class DashboardController {
     
     @GetMapping("/")
     public String home() {
-        return "redirect:/dashboard";
+        return "index";
     }
     
     @GetMapping("/dashboard")
@@ -38,6 +38,11 @@ public class DashboardController {
     @GetMapping("/capacity")
     public String capacityDashboard() {
         return "capacity-dashboard";
+    }
+    
+    @GetMapping("/single-snapshot")
+    public String singleSnapshotDashboard() {
+        return "single-snapshot-dashboard";
     }
     
     @GetMapping("/api/summary")

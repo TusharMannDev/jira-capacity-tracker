@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Single Snapshot Dashboard - Jira Tracker</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        .dashboard-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #667eea;
+            margin-bottom: 1rem;
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .label-checkbox {
+            margin: 0.25rem 0;
+        }
+        
+        .label-selection {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 1rem;
+        }
+        
+        .preview-table {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+        
+        .status-live { background-color: #28a745; }
+        .status-qa { background-color: #ffc107; color: #000; }
+        .status-dev { background-color: #17a2b8; }
+        .status-uat { background-color: #6f42c1; }
+        
+        .loading-spinner {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-chart-line me-2"></i>Jira Tracker
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/dashboard">Dashboard</a>
+                <a class="nav-link" href="/capacity">Capacity Planning</a>
+                <a class="nav-link active" href="/single-snapshot">Single Snapshot</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Header -->
+    <div class="dashboard-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1 class="mb-2">
+                        <i class="fas fa-layer-group me-3"></i>Single Snapshot Dashboard
+                    </h1>
+                    <p class="mb-0">Generate comprehensive POD-based snapshots for selected Jira labels</p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <div class="stat-card bg-transparent border border-light text-white">
+                        <div class="stat-number" id="totalLabelsCount">-</div>
+                        <div>Available Labels</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Date Range Selection Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-calendar-alt me-2"></i>Date Range Selection <span class="badge bg-danger">Required</span>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <label for="startDate" class="form-label">Start Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="startDate" name="startDate" required>
+                                <small class="text-muted">Required - Filter tasks created from this date</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="endDate" class="form-label">End Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="endDate" name="endDate" required>
+                                <small class="text-muted">Required - Filter tasks created until this date</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Quick Select</label>
+                                <div class="d-grid gap-2">
+                                    <button id="setLast30DaysBtn" class="btn btn-outline-primary btn-sm">
+                                        <i class="fas fa-calendar-day"></i> Last 30 Days
+                                    </button>
+                                    <button id="setLast90DaysBtn" class="btn btn-outline-info btn-sm">
+                                        <i class="fas fa-calendar-week"></i> Last 90 Days
+                                    </button>
+                                </div>
+                                <small class="text-danger">Max 6 months (180 days) allowed</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Label Selection Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-tags me-2"></i>Select Labels for Snapshot
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="label-selection" id="labelSelection">
+                                    <div class="text-center">
+                                        <div class="spinner-border" role="status">
+                                            <span class="visually-hidden">Loading labels...</span>
+                                        </div>
+                                        <p class="mt-2">Loading available labels...</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="d-grid gap-2">
+                                    <button id="selectAllBtn" class="btn btn-outline-primary">
+                                        <i class="fas fa-check-double"></i> Select All
+                                    </button>
+                                    <button id="clearAllBtn" class="btn btn-outline-secondary">
+                                        <i class="fas fa-times"></i> Clear All
+                                    </button>
+                                    <hr>
+                                    <button id="generateSnapshotBtn" class="btn btn-success" disabled>
+                                        <i class="fas fa-camera"></i> Generate Snapshot
+                                    </button>
+                                    <button id="previewSnapshotBtn" class="btn btn-info" disabled>
+                                        <i class="fas fa-eye"></i> Preview Data
+                                    </button>
+                                    <button id="exportCsvBtn" class="btn btn-outline-secondary" disabled>
+                                        <i class="fas fa-file-csv"></i> Export CSV
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary Statistics -->
+        <div class="row mb-4" id="summarySection" style="display: none;">
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-number" id="totalTasksCount">0</div>
+                    <div>Total Tasks</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-number" id="totalPodsCount">0</div>
+                    <div>Total PODs</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-number" id="selectedLabelsCount">0</div>
+                    <div>Selected Labels</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-number" id="generatedDate">-</div>
+                    <div>Generated</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Breakdown Chart -->
+        <div class="row mb-4" id="chartSection" style="display: none;">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">Status Breakdown</h6>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="statusChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">POD Distribution</h6>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="podChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Preview Data Section -->
+        <div class="row" id="previewSection" style="display: none;">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">
+                            <i class="fas fa-table me-2"></i>Snapshot Preview
+                        </h6>
+                        <span class="badge bg-primary" id="previewRowsCount">0 rows</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="preview-table">
+                            <table class="table table-striped table-hover" id="previewTable">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Column A</th>
+                                        <th>Column B</th>
+                                        <th>Column C</th>
+                                        <th>Column D</th>
+                                        <th>Column E</th>
+                                        <th>Column F</th>
+                                        <th>Column G</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="previewTableBody">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Modal -->
+    <div class="modal fade" id="loadingModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-body text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3 mb-0">Generating Single Snapshot...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        let availableLabels = [];
+        let currentSnapshot = null;
+        let statusChart = null;
+        let podChart = null;
+
+        // Load available labels on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAvailableLabels();
+        });
+
+        // Load available labels
+        function loadAvailableLabels() {
+            fetch('/api/single-snapshot/available-labels')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        availableLabels = data.labels;
+                        renderLabelSelection(data.labels);
+                        document.getElementById('totalLabelsCount').textContent = data.totalLabels;
+                    } else {
+                        showError('Failed to load labels: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading labels:', error);
+                    showError('Failed to load labels');
+                });
+        }
+
+        // Render label selection checkboxes
+        function renderLabelSelection(labels) {
+            const container = document.getElementById('labelSelection');
+            container.innerHTML = '';
+
+            if (labels.length === 0) {
+                container.innerHTML = '<p class="text-muted">No labels available</p>';
+                return;
+            }
+
+            labels.forEach(label => {
+                const checkboxDiv = document.createElement('div');
+                checkboxDiv.className = 'form-check label-checkbox';
+                checkboxDiv.innerHTML = `
+                    <input class="form-check-input label-checkbox-input" type="checkbox" 
+                           value="${label}" id="label_${label}">
+                    <label class="form-check-label" for="label_${label}">
+                        ${label}
+                    </label>
+                `;
+                container.appendChild(checkboxDiv);
+            });
+
+            // Add event listeners to checkboxes
+            document.querySelectorAll('.label-checkbox-input').forEach(checkbox => {
+                checkbox.addEventListener('change', updateButtonStates);
+            });
+        }
+
+        // Update button states based on selection
+        function updateButtonStates() {
+            const selectedLabels = getSelectedLabels();
+            const hasSelection = selectedLabels.length > 0;
+            
+            document.getElementById('generateSnapshotBtn').disabled = !hasSelection;
+            document.getElementById('previewSnapshotBtn').disabled = !hasSelection;
+            document.getElementById('exportCsvBtn').disabled = !hasSelection;
+        }
+
+        // Get selected labels
+        function getSelectedLabels() {
+            return Array.from(document.querySelectorAll('.label-checkbox-input:checked'))
+                .map(checkbox => checkbox.value);
+        }
+
+        // Validate date range
+        function validateDateRange() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            if (!startDate) {
+                showError('Start date is required for performance reasons');
+                return false;
+            }
+
+            if (!endDate) {
+                showError('End date is required for performance reasons');
+                return false;
+            }
+
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+
+            if (start > end) {
+                showError('Start date must be before or equal to end date');
+                return false;
+            }
+
+            const daysDiff = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+            if (daysDiff > 180) {
+                showError(`Date range cannot exceed 6 months (180 days). Current range: ${daysDiff} days`);
+                return false;
+            }
+
+            return true;
+        }
+
+        // Select all labels
+        document.getElementById('selectAllBtn').addEventListener('click', function() {
+            document.querySelectorAll('.label-checkbox-input').forEach(checkbox => {
+                checkbox.checked = true;
+            });
+            updateButtonStates();
+        });
+
+        // Clear all selections
+        document.getElementById('clearAllBtn').addEventListener('click', function() {
+            document.querySelectorAll('.label-checkbox-input').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            updateButtonStates();
+            hideResults();
+        });
+
+        // Quick date selection buttons
+        document.getElementById('setLast30DaysBtn').addEventListener('click', function() {
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setDate(endDate.getDate() - 30);
+            
+            document.getElementById('endDate').value = endDate.toISOString().split('T')[0];
+            document.getElementById('startDate').value = startDate.toISOString().split('T')[0];
+        });
+
+        document.getElementById('setLast90DaysBtn').addEventListener('click', function() {
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setDate(endDate.getDate() - 90);
+            
+            document.getElementById('endDate').value = endDate.toISOString().split('T')[0];
+            document.getElementById('startDate').value = startDate.toISOString().split('T')[0];
+        });
+
+        // Generate snapshot
+        document.getElementById('generateSnapshotBtn').addEventListener('click', function() {
+            const selectedLabels = getSelectedLabels();
+            if (selectedLabels.length === 0) {
+                showError('Please select at least one label');
+                return;
+            }
+
+            if (!validateDateRange()) {
+                return;
+            }
+
+            generateSnapshot(selectedLabels);
+        });
+
+        // Preview snapshot
+        document.getElementById('previewSnapshotBtn').addEventListener('click', function() {
+            const selectedLabels = getSelectedLabels();
+            if (selectedLabels.length === 0) {
+                showError('Please select at least one label');
+                return;
+            }
+
+            if (!validateDateRange()) {
+                return;
+            }
+
+            previewSnapshot(selectedLabels);
+        });
+
+        // Export CSV
+        document.getElementById('exportCsvBtn').addEventListener('click', function() {
+            const selectedLabels = getSelectedLabels();
+            if (selectedLabels.length === 0) {
+                showError('Please select at least one label');
+                return;
+            }
+
+            if (!validateDateRange()) {
+                return;
+            }
+
+            exportSnapshotCsv(selectedLabels);
+        });
+
+        // Generate snapshot
+        function generateSnapshot(selectedLabels) {
+            showLoading();
+            
+            // Fallback timeout to hide loader after 10 seconds
+            const timeoutId = setTimeout(() => {
+                console.warn('Generate timeout - forcing loader to hide');
+                hideLoading();
+                showError('Request timed out. Please try again.');
+            }, 10000);
+            
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            const requestBody = { 
+                labels: selectedLabels,
+                startDate: startDate,
+                endDate: endDate
+            };
+            
+            fetch('/api/single-snapshot/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            })
+            .then(response => response.json())
+            .then(data => {
+                clearTimeout(timeoutId);
+                hideLoading();
+                if (data.status === 'success') {
+                    currentSnapshot = data.snapshot;
+                    showSuccess('Single Snapshot generated successfully!');
+                    updateSummaryStats(data.snapshot);
+                    loadSummaryCharts(selectedLabels);
+                } else {
+                    showError('Failed to generate snapshot: ' + data.message);
+                }
+            })
+            .catch(error => {
+                clearTimeout(timeoutId);
+                hideLoading();
+                console.error('Error generating snapshot:', error);
+                showError('Failed to generate snapshot: ' + error.message);
+            });
+        }
+
+        // Preview snapshot
+        function previewSnapshot(selectedLabels) {
+            showLoading();
+            
+            // Fallback timeout to hide loader after 10 seconds
+            const timeoutId = setTimeout(() => {
+                console.warn('Preview timeout - forcing loader to hide');
+                hideLoading();
+                showError('Request timed out. Please try again.');
+            }, 10000);
+            
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            const requestBody = { 
+                labels: selectedLabels,
+                startDate: startDate,
+                endDate: endDate
+            };
+            
+            fetch('/api/single-snapshot/preview', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            })
+            .then(response => response.json())
+            .then(data => {
+                clearTimeout(timeoutId); // Clear the timeout since we got a response
+                console.log('Preview API Response:', data);
+                
+                // Force hide loader immediately
+                hideLoading();
+                
+                // Additional force hide after a short delay
+                setTimeout(() => {
+                    hideLoading();
+                    console.log('Secondary loader hide executed');
+                }, 200);
+                
+                if (data.status === 'success') {
+                    console.log('Preview data received, rows:', data.preview ? data.preview.length : 'No preview data');
+                    currentSnapshot = data.snapshot;
+                    updateSummaryStats(data.snapshot);
+                    renderPreviewTable(data.preview);
+                    showResults();
+                    console.log('Preview sections should now be visible');
+                    
+                    // Load charts after everything else is done
+                    setTimeout(() => {
+                        loadSummaryCharts(selectedLabels);
+                    }, 300);
+                } else {
+                    console.error('Preview API Error:', data.message);
+                    showError('Failed to preview snapshot: ' + data.message);
+                }
+            })
+            .catch(error => {
+                clearTimeout(timeoutId); // Clear the timeout since we got an error
+                hideLoading();
+                console.error('Error previewing snapshot:', error);
+                showError('Failed to preview snapshot: ' + error.message);
+            });
+        }
+
+        // Export CSV
+        function exportSnapshotCsv(selectedLabels) {
+            showLoading();
+            
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            const requestBody = { 
+                labels: selectedLabels,
+                startDate: startDate,
+                endDate: endDate
+            };
+            
+            fetch('/api/single-snapshot/export-csv', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            })
+            .then(response => {
+                hideLoading();
+                if (response.ok) {
+                    return response.blob();
+                }
+                throw new Error('Export failed');
+            })
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `single-snapshot-${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                showSuccess('CSV exported successfully!');
+            })
+            .catch(error => {
+                console.error('Export error:', error);
+                showError('Failed to export CSV');
+            });
+        }
+
+        // Load summary charts (async, don't show loader)
+        function loadSummaryCharts(selectedLabels) {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            const requestBody = { 
+                labels: selectedLabels,
+                startDate: startDate,
+                endDate: endDate
+            };
+            
+            // Don't show loading for charts - they load in background
+            fetch('/api/single-snapshot/summary', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    renderStatusChart(data.summary.statusBreakdown);
+                    renderPodChart(data.summary.podBreakdown);
+                } else {
+                    console.warn('Charts data not available:', data.message);
+                }
+            })
+            .catch(error => {
+                console.warn('Charts loading failed (non-critical):', error);
+                // Don't show error to user - charts are optional
+            });
+        }
+
+        // Update summary statistics
+        function updateSummaryStats(snapshot) {
+            document.getElementById('totalTasksCount').textContent = snapshot.totalTasks;
+            document.getElementById('totalPodsCount').textContent = snapshot.totalPods;
+            document.getElementById('selectedLabelsCount').textContent = snapshot.selectedLabels.length;
+            document.getElementById('generatedDate').textContent = new Date(snapshot.generatedDate).toLocaleDateString();
+        }
+
+        // Render preview table
+        function renderPreviewTable(previewData) {
+            console.log('renderPreviewTable called with data:', previewData ? previewData.length + ' rows' : 'null data');
+            const tbody = document.getElementById('previewTableBody');
+            tbody.innerHTML = '';
+
+            if (!previewData || previewData.length === 0) {
+                console.log('No preview data available');
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No data available</td></tr>';
+                return;
+            }
+
+            // Render all rows (no header row to skip in new format)
+            for (let i = 0; i < previewData.length; i++) {
+                const row = previewData[i];
+                const tr = document.createElement('tr');
+                
+                // Check if this is a POD category header row
+                if (row[0] && row[1] === '' && row[2] === '' && row[3] === '' && row[4] === '' && row[5] === '' && row[6] === '') {
+                    tr.className = 'table-primary fw-bold';
+                    tr.innerHTML = `<td colspan="7" class="text-center fs-5">${row[0]}</td>`;
+                }
+                // Check if this is a Team Resources header
+                else if (row[0] === 'Team Resources') {
+                    tr.className = 'table-secondary fw-bold';
+                    tr.innerHTML = `
+                        <td>${row[0] || ''}</td>
+                        <td>${row[1] || ''}</td>
+                        <td>${row[2] || ''}</td>
+                        <td>${row[3] || ''}</td>
+                        <td>${row[4] || ''}</td>
+                        <td>${row[5] || ''}</td>
+                        <td>${row[6] || ''}</td>
+                    `;
+                }
+                // Check if this is a Tasks header
+                else if (row[0] === 'Tasks') {
+                    tr.className = 'table-info fw-bold';
+                    tr.innerHTML = `
+                        <td>${row[0] || ''}</td>
+                        <td>${row[1] || ''}</td>
+                        <td>${row[2] || ''}</td>
+                        <td>${row[3] || ''}</td>
+                        <td>${row[4] || ''}</td>
+                        <td>${row[5] || ''}</td>
+                        <td>${row[6] || ''}</td>
+                    `;
+                }
+                // Regular data rows
+                else {
+                    tr.innerHTML = `
+                        <td class="text-truncate" style="max-width: 150px;" title="${row[0] || ''}">${row[0] || ''}</td>
+                        <td class="text-truncate" style="max-width: 100px;" title="${row[1] || ''}">${row[1] || ''}</td>
+                        <td class="text-truncate" style="max-width: 150px;" title="${row[2] || ''}">${row[2] || ''}</td>
+                        <td class="text-truncate" style="max-width: 100px;" title="${row[3] || ''}">${row[3] || ''}</td>
+                        <td class="text-truncate" style="max-width: 150px;" title="${row[4] || ''}">${row[4] || ''}</td>
+                        <td class="text-truncate" style="max-width: 100px;" title="${row[5] || ''}">${row[5] || ''}</td>
+                        <td class="text-truncate" style="max-width: 150px;" title="${row[6] || ''}">${row[6] || ''}</td>
+                    `;
+                }
+                tbody.appendChild(tr);
+            }
+
+            document.getElementById('previewRowsCount').textContent = `${previewData.length} rows`;
+            console.log('Preview table rendered with', previewData.length, 'rows');
+        }
+
+        // Render status chart
+        function renderStatusChart(statusData) {
+            const ctx = document.getElementById('statusChart').getContext('2d');
+            
+            if (statusChart) {
+                statusChart.destroy();
+            }
+
+            statusChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(statusData),
+                    datasets: [{
+                        data: Object.values(statusData),
+                        backgroundColor: [
+                            '#28a745', // Live - Green
+                            '#ffc107', // QA - Yellow
+                            '#17a2b8', // Dev - Blue
+                            '#6f42c1'  // UAT - Purple
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        // Render POD chart
+        function renderPodChart(podData) {
+            const ctx = document.getElementById('podChart').getContext('2d');
+            
+            if (podChart) {
+                podChart.destroy();
+            }
+
+            podChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(podData).map(label => label.length > 20 ? label.substring(0, 20) + '...' : label),
+                    datasets: [{
+                        label: 'Tasks',
+                        data: Object.values(podData),
+                        backgroundColor: '#667eea'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        // Show results sections
+        function showResults() {
+            document.getElementById('summarySection').style.display = 'block';
+            document.getElementById('chartSection').style.display = 'block';
+            document.getElementById('previewSection').style.display = 'block';
+        }
+
+        // Hide results sections
+        function hideResults() {
+            document.getElementById('summarySection').style.display = 'none';
+            document.getElementById('chartSection').style.display = 'none';
+            document.getElementById('previewSection').style.display = 'none';
+        }
+
+        // Show loading modal
+        function showLoading() {
+            try {
+                const modalElement = document.getElementById('loadingModal');
+                let modal = bootstrap.Modal.getInstance(modalElement);
+                if (!modal) {
+                    modal = new bootstrap.Modal(modalElement);
+                }
+                modal.show();
+                console.log('Loading modal shown');
+            } catch (error) {
+                console.error('Error showing loading modal:', error);
+            }
+        }
+
+        // Hide loading modal
+        function hideLoading() {
+            try {
+                const modalElement = document.getElementById('loadingModal');
+                const modal = bootstrap.Modal.getInstance(modalElement);
+                if (modal) {
+                    modal.hide();
+                }
+                
+                // Force hide regardless of modal instance
+                setTimeout(() => {
+                    modalElement.classList.remove('show');
+                    modalElement.style.display = 'none';
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+                    
+                    // Remove all backdrops
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    backdrops.forEach(backdrop => backdrop.remove());
+                    
+                    console.log('Loading modal force hidden');
+                }, 100);
+                
+                console.log('Loading modal hidden successfully');
+            } catch (error) {
+                console.error('Error hiding loading modal:', error);
+                // Force hide the modal
+                const modalElement = document.getElementById('loadingModal');
+                modalElement.classList.remove('show');
+                modalElement.style.display = 'none';
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+                
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(backdrop => backdrop.remove());
+            }
+        }
+
+        // Show success message
+        function showSuccess(message) {
+            // You can implement a toast notification here
+            console.log('Success:', message);
+        }
+
+        // Show error message
+        function showError(message) {
+            alert('Error: ' + message);
+        }
+
+        // Emergency function to force hide loader (for debugging)
+        function forceHideLoader() {
+            console.log('Force hiding loader...');
+            const modalElement = document.getElementById('loadingModal');
+            
+            // Remove all modal classes and styles
+            modalElement.classList.remove('show', 'fade');
+            modalElement.style.display = 'none';
+            modalElement.setAttribute('aria-hidden', 'true');
+            modalElement.removeAttribute('aria-modal');
+            modalElement.removeAttribute('role');
+            
+            // Clean up body
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+            
+            // Remove all backdrops
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            backdrops.forEach(backdrop => {
+                backdrop.remove();
+            });
+            
+            console.log('Loader force hidden');
+        }
+
+        // Add keyboard shortcut to force hide loader (Ctrl+H)
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'h') {
+                e.preventDefault();
+                forceHideLoader();
+            }
+        });
+    </script>
+</body>
+</html>

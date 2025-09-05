@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jira Dashboard Tracker - Home</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        .hero-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 4rem 0;
+        }
+        
+        .feature-card {
+            background: white;
+            border-radius: 15px;
+            padding: 2rem;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            height: 100%;
+            border: none;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+        }
+        
+        .feature-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin: 0 auto 1.5rem;
+        }
+        
+        .icon-dashboard { background: linear-gradient(135deg, #4facfe, #00f2fe); }
+        .icon-capacity { background: linear-gradient(135deg, #43e97b, #38f9d7); }
+        .icon-snapshot { background: linear-gradient(135deg, #fa709a, #fee140); }
+        
+        .btn-feature {
+            border-radius: 25px;
+            padding: 0.75rem 2rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-feature:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-chart-line me-2"></i>Jira Tracker
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/dashboard">Dashboard</a>
+                <a class="nav-link" href="/capacity">Capacity Planning</a>
+                <a class="nav-link" href="/single-snapshot">Single Snapshot</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <div class="container text-center">
+            <h1 class="display-4 fw-bold mb-4">
+                <i class="fas fa-rocket me-3"></i>Jira Dashboard Tracker
+            </h1>
+            <p class="lead mb-5">
+                Comprehensive project management and capacity planning tools for your Jira workspace
+            </p>
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+                    <p class="fs-5">
+                        Track issues, plan capacity, and generate comprehensive snapshots 
+                        with powerful filtering and export capabilities.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Features Section -->
+    <div class="container my-5">
+        <div class="row g-4">
+            <!-- Dashboard Feature -->
+            <div class="col-lg-4 col-md-6">
+                <div class="card feature-card text-center">
+                    <div class="feature-icon icon-dashboard text-white">
+                        <i class="fas fa-tachometer-alt"></i>
+                    </div>
+                    <h4 class="mb-3">Daily Dashboard</h4>
+                    <p class="text-muted mb-4">
+                        Real-time overview of your team's Jira issues with status breakdowns, 
+                        priority tracking, and daily scrum summaries.
+                    </p>
+                    <ul class="list-unstyled text-start mb-4">
+                        <li><i class="fas fa-check text-success me-2"></i>Status Overview Cards</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Priority Breakdown</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Recent Issues List</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Real-time Sync</li>
+                    </ul>
+                    <a href="/dashboard" class="btn btn-primary btn-feature">
+                        <i class="fas fa-arrow-right me-2"></i>View Dashboard
+                    </a>
+                </div>
+            </div>
+
+            <!-- Capacity Planning Feature -->
+            <div class="col-lg-4 col-md-6">
+                <div class="card feature-card text-center">
+                    <div class="feature-icon icon-capacity text-white">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <h4 class="mb-3">Capacity Planning</h4>
+                    <p class="text-muted mb-4">
+                        Advanced team capacity management with workload forecasting, 
+                        resource availability, and Google Sheets integration.
+                    </p>
+                    <ul class="list-unstyled text-start mb-4">
+                        <li><i class="fas fa-check text-success me-2"></i>Team Utilization</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Workload Forecasting</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Date Range Filtering</li>
+                        <li><i class="fas fa-check text-success me-2"></i>CSV Export</li>
+                    </ul>
+                    <a href="/capacity" class="btn btn-success btn-feature">
+                        <i class="fas fa-arrow-right me-2"></i>Plan Capacity
+                    </a>
+                </div>
+            </div>
+
+            <!-- Single Snapshot Feature -->
+            <div class="col-lg-4 col-md-6">
+                <div class="card feature-card text-center">
+                    <div class="feature-icon icon-snapshot text-white">
+                        <i class="fas fa-layer-group"></i>
+                    </div>
+                    <h4 class="mb-3">Single Snapshot</h4>
+                    <p class="text-muted mb-4">
+                        Generate comprehensive POD-based snapshots with label filtering, 
+                        date range selection, and multi-format exports.
+                    </p>
+                    <ul class="list-unstyled text-start mb-4">
+                        <li><i class="fas fa-check text-success me-2"></i>Multi-POD Views</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Label-based Filtering</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Date Range Support</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Status Breakdown</li>
+                    </ul>
+                    <a href="/single-snapshot" class="btn btn-warning btn-feature">
+                        <i class="fas fa-arrow-right me-2"></i>Create Snapshot
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats Section -->
+    <div class="bg-light py-5">
+        <div class="container">
+            <div class="row text-center">
+                <div class="col-md-3">
+                    <div class="mb-3">
+                        <i class="fas fa-tasks fa-3x text-primary"></i>
+                    </div>
+                    <h4>Issue Tracking</h4>
+                    <p class="text-muted">Comprehensive Jira issue management</p>
+                </div>
+                <div class="col-md-3">
+                    <div class="mb-3">
+                        <i class="fas fa-chart-bar fa-3x text-success"></i>
+                    </div>
+                    <h4>Analytics</h4>
+                    <p class="text-muted">Detailed reporting and insights</p>
+                </div>
+                <div class="col-md-3">
+                    <div class="mb-3">
+                        <i class="fas fa-calendar-alt fa-3x text-warning"></i>
+                    </div>
+                    <h4>Date Filtering</h4>
+                    <p class="text-muted">Flexible date range selection</p>
+                </div>
+                <div class="col-md-3">
+                    <div class="mb-3">
+                        <i class="fas fa-download fa-3x text-info"></i>
+                    </div>
+                    <h4>Export Options</h4>
+                    <p class="text-muted">CSV, Google Sheets integration</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-white py-4">
+        <div class="container text-center">
+            <p class="mb-0">
+                <i class="fas fa-code me-2"></i>
+                Jira Dashboard Tracker - Built with Spring Boot & Bootstrap
+            </p>
+        </div>
+    </footer>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
