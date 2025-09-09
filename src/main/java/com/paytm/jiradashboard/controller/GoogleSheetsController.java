@@ -122,9 +122,9 @@ public class GoogleSheetsController {
                 summary = sheetsService.getSheetSummary();
             }
             
-            // Return first 50 rows for preview
+            // Return first 100 rows for preview
             List<List<Object>> preview = data.stream()
-                    .limit(50)
+                    .limit(100)
                     .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
             
             Map<String, Object> response = Map.of(

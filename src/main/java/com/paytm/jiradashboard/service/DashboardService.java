@@ -5,6 +5,8 @@ import com.paytm.jiradashboard.model.JiraIssue;
 import com.paytm.jiradashboard.repository.JiraIssueRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +26,9 @@ public class DashboardService {
     
     @Autowired
     private EmailService emailService;
+    
+    @Value("${app.auto-sync.enabled:false}")
+    private boolean autoSyncEnabled;
     
     public void syncIssuesFromJira() {
         log.info("Starting Jira sync...");
@@ -301,6 +306,11 @@ public class DashboardService {
     
     @Scheduled(fixedRate = 300000) // Every 5 minutes
     public void autoSyncIssues() {
+        if (!autoSyncEnabled) {
+            log.debug("Auto-sync is disabled. Set AUTO_SYNC_ENABLED=true to enable background sync.");
+            return;
+        }
+        
         log.info("Auto-syncing issues from Jira...");
         syncIssuesFromJira();
     }

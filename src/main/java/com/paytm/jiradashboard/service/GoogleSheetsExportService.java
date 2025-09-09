@@ -17,7 +17,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class GoogleSheetsExportService {
-
+    
+    private final JiraApiService jiraApiService;
     private final JiraIssueRepository jiraIssueRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final TaskAssignmentRepository taskAssignmentRepository;
@@ -57,46 +58,54 @@ public class GoogleSheetsExportService {
             "Jain, Mayank5", "Tiiwari, Vineet2", "Jain, Atishay2", "Mann, Tushar", "Kumar, Puneet6"
         );
         
-        // Get issues filtered by date range
-        List<JiraIssue> activeIssues = jiraIssueRepository.findByStatusIn(
-                Arrays.asList(IssueStatus.TO_DO, IssueStatus.IN_PROGRESS, IssueStatus.IN_REVIEW))
-                .stream()
-                .filter(issue -> {
-                    LocalDate createdDate = issue.getCreated().toLocalDate();
-                    return !createdDate.isBefore(startDate) && !createdDate.isAfter(endDate);
-                })
-                .filter(issue -> targetMembers.contains(issue.getAssignee()))
-                .collect(Collectors.toList());
-        
-        // Filter team members for only target members
-        List<TeamMember> teamMembers = teamMemberRepository.findByIsActiveTrue().stream()
-                .filter(member -> targetMembers.contains(member.getName()))
-                .collect(Collectors.toList());
-        
-        // Filter assignments for only target members and date range
-        List<TaskAssignment> assignments = taskAssignmentRepository.findAll().stream()
-                .filter(assignment -> targetMembers.contains(assignment.getAssigneeName()))
-                .filter(assignment -> {
-                    if (assignment.getCreatedAt() != null) {
-                        LocalDate createdDate = assignment.getCreatedAt().toLocalDate();
-                        return !createdDate.isBefore(startDate) && !createdDate.isAfter(endDate);
-                    }
-                    return true; // Include if no creation date
-                })
-                .collect(Collectors.toList());
-        
-        // Generate timeline weeks
-        List<WeekColumn> timelineWeeks = generateTimelineWeeks(12); // Next 12 weeks
-        
-        // Group by POD/Team and Lead
-        Map<String, List<CapacityRow>> groupedData = generateCapacityRows(activeIssues, assignments, teamMembers, timelineWeeks);
-        
-        return CapacityTrackingSheet.builder()
-                .title("OE_Payments_Task_Tracker - Date Filtered (" + startDate + " to " + endDate + ")")
-                .generatedDate(LocalDate.now())
-                .timelineWeeks(timelineWeeks)
-                .teamData(groupedData)
-                .build();
+        try {
+            // Fetch fresh data directly from Jira API
+            List<JiraIssue> allIssues = jiraApiService.fetchIssuesByDateRange(startDate, endDate);
+            log.info("Fetched {} issues from Jira API for capacity tracking", allIssues.size());
+            
+            // Filter by target members and active statuses
+            List<JiraIssue> activeIssues = allIssues.stream()
+                    .filter(issue -> Arrays.asList(IssueStatus.TO_DO, IssueStatus.IN_PROGRESS, IssueStatus.IN_REVIEW)
+                            .contains(issue.getStatus()))
+                    .filter(issue -> targetMembers.contains(issue.getAssignee()))
+                    .collect(Collectors.toList());
+            
+                log.info("Filtered to {} active issues for target members", activeIssues.size());
+            
+            // Filter team members for only target members (still from DB as this is configuration data)
+            List<TeamMember> teamMembers = teamMemberRepository.findByIsActiveTrue().stream()
+                    .filter(member -> targetMembers.contains(member.getName()))
+                    .collect(Collectors.toList());
+            
+            // Filter assignments for only target members and date range (still from DB as this is internal tracking)
+            List<TaskAssignment> assignments = taskAssignmentRepository.findAll().stream()
+                    .filter(assignment -> targetMembers.contains(assignment.getAssigneeName()))
+                    .filter(assignment -> {
+                        if (assignment.getCreatedAt() != null) {
+                            LocalDate createdDate = assignment.getCreatedAt().toLocalDate();
+                            return !createdDate.isBefore(startDate) && !createdDate.isAfter(endDate);
+                        }
+                        return true; // Include if no creation date
+                    })
+                    .collect(Collectors.toList());
+            
+            // Generate timeline weeks
+            List<WeekColumn> timelineWeeks = generateTimelineWeeks(12);
+            
+            // Group by POD/Team and Lead
+            Map<String, List<CapacityRow>> groupedData = generateCapacityRows(activeIssues, assignments, teamMembers, timelineWeeks);
+            
+            return CapacityTrackingSheet.builder()
+                    .title("OE_Payments_Task_Tracker - LIVE DATA (" + startDate + " to " + endDate + ")")
+                    .generatedDate(LocalDate.now())
+                    .timelineWeeks(timelineWeeks)
+                    .teamData(groupedData)
+                    .build();
+                    
+        } catch (Exception e) {
+            log.error("Error generating capacity tracking sheet from Jira API", e);
+            throw new RuntimeException("Failed to generate capacity sheet from Jira API: " + e.getMessage(), e);
+        }
     }
 
     private List<WeekColumn> generateTimelineWeeks(int weekCount) {

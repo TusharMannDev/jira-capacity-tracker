@@ -81,3 +81,6 @@ application-prod.properties
 
 # Environment files
 *.env
+
+# Startup scripts with sensitive data
+start-app.sh

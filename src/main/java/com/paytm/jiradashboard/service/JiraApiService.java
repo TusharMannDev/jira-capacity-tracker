@@ -110,7 +110,7 @@ public class JiraApiService {
             // Build JQL query combining environment filter with date range
             String baseJql = jqlFilter.replace(" ORDER BY priority DESC, status ASC, issuetype ASC", "");
             String dateRangeJql = String.format(
-                "(%s) AND created >= '%s' AND created <= '%s' ORDER BY created DESC", 
+                "(%s) AND updated >= '%s' AND updated <= '%s' ORDER BY updated DESC", 
                 baseJql,
                 startDate.toString(), 
                 endDate.toString()
@@ -135,7 +135,7 @@ public class JiraApiService {
                 Map<String, Object> responseBody = response.getBody();
                 List<Map<String, Object>> issues = (List<Map<String, Object>>) responseBody.get("issues");
                 
-                log.info("Fetched {} issues from Jira for date range {} to {}", 
+                log.info("Fetched {} issues from Jira updated between {} and {}", 
                         issues.size(), startDate, endDate);
                 
                 return issues.stream()

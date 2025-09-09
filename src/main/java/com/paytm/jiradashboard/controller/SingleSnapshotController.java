@@ -170,11 +170,12 @@ public class SingleSnapshotController {
             SingleSnapshotService.SingleSnapshotSheet snapshot = 
                     snapshotService.generateSingleSnapshotByDateRange(selectedLabels, startDate, endDate);
             
-            List<List<Object>> sheetsData = snapshotService.convertToSheetsData(snapshot);
+            // Use horizontal layout for preview (Google Sheets style)
+            List<List<Object>> horizontalData = snapshotService.convertToHorizontalLayout(snapshot);
             
-            // Return first 50 rows for preview
-            List<List<Object>> preview = sheetsData.stream()
-                    .limit(50)
+            // Return first 100 rows for preview
+            List<List<Object>> preview = horizontalData.stream()
+                    .limit(100)
                     .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
             
             Map<String, Object> response = Map.of(
@@ -188,7 +189,7 @@ public class SingleSnapshotController {
                             "dateRange", snapshot.getDateRange() != null ? snapshot.getDateRange() : "All data"
                     ),
                     "preview", preview,
-                    "totalRows", sheetsData.size(),
+                    "totalRows", horizontalData.size(),
                     "previewRows", preview.size()
             );
             
@@ -223,8 +224,9 @@ public class SingleSnapshotController {
                 snapshot = snapshotService.generateSingleSnapshot(selectedLabels);
             }
             
-            List<List<Object>> sheetsData = snapshotService.convertToSheetsData(snapshot);
-            String csvContent = convertToCsv(sheetsData);
+            // Use horizontal layout for CSV export (Google Sheets style)
+            List<List<Object>> horizontalData = snapshotService.convertToHorizontalLayout(snapshot);
+            String csvContent = convertToCsv(horizontalData);
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.TEXT_PLAIN);

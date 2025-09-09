@@ -254,16 +254,8 @@
                     <div class="card-body">
                         <div class="preview-table">
                             <table class="table table-striped table-hover" id="previewTable">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>Column A</th>
-                                        <th>Column B</th>
-                                        <th>Column C</th>
-                                        <th>Column D</th>
-                                        <th>Column E</th>
-                                        <th>Column F</th>
-                                        <th>Column G</th>
-                                    </tr>
+                                <thead class="table-dark" id="previewTableHead">
+                                    <!-- Dynamic headers will be generated based on selected labels -->
                                 </thead>
                                 <tbody id="previewTableBody">
                                 </tbody>
@@ -680,71 +672,118 @@
             document.getElementById('generatedDate').textContent = new Date(snapshot.generatedDate).toLocaleDateString();
         }
 
-        // Render preview table
+        // Render preview table (Horizontal Layout - Google Sheets Style)
         function renderPreviewTable(previewData) {
             console.log('renderPreviewTable called with data:', previewData ? previewData.length + ' rows' : 'null data');
+            const thead = document.getElementById('previewTableHead');
             const tbody = document.getElementById('previewTableBody');
+            thead.innerHTML = '';
             tbody.innerHTML = '';
 
             if (!previewData || previewData.length === 0) {
                 console.log('No preview data available');
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No data available</td></tr>';
+                tbody.innerHTML = '<tr><td class="text-center text-muted">No data available</td></tr>';
                 return;
             }
 
-            // Render all rows (no header row to skip in new format)
+            // Determine number of columns from first row
+            const numColumns = previewData[0] ? previewData[0].length : 0;
+            
+            // Generate dynamic headers based on number of columns
+            const headerRow = document.createElement('tr');
+            for (let i = 0; i < numColumns; i++) {
+                const th = document.createElement('th');
+                th.textContent = `Column ${String.fromCharCode(65 + i)}`; // A, B, C, D, etc.
+                headerRow.appendChild(th);
+            }
+            thead.appendChild(headerRow);
+
+            // Render all rows in horizontal layout format
             for (let i = 0; i < previewData.length; i++) {
                 const row = previewData[i];
                 const tr = document.createElement('tr');
                 
-                // Check if this is a POD category header row
-                if (row[0] && row[1] === '' && row[2] === '' && row[3] === '' && row[4] === '' && row[5] === '' && row[6] === '') {
+                // Check if this is the first row (label headers)
+                if (i === 0) {
                     tr.className = 'table-primary fw-bold';
-                    tr.innerHTML = `<td colspan="7" class="text-center fs-5">${row[0]}</td>`;
+                    for (let j = 0; j < numColumns; j++) {
+                        const td = document.createElement('td');
+                        td.className = 'text-center fs-6 fw-bold';
+                        td.textContent = row[j] || '';
+                        tr.appendChild(td);
+                    }
                 }
-                // Check if this is a Team Resources header
-                else if (row[0] === 'Team Resources') {
+                // Check if this is an empty row (spacing)
+                else if (row.every(cell => !cell || cell.trim() === '')) {
+                    tr.className = 'table-light';
+                    for (let j = 0; j < numColumns; j++) {
+                        const td = document.createElement('td');
+                        td.style.height = '10px';
+                        td.innerHTML = '&nbsp;';
+                        tr.appendChild(td);
+                    }
+                }
+                // Check if this is a "Team Resources" header row
+                else if (row.some(cell => cell === 'Team Resources')) {
                     tr.className = 'table-secondary fw-bold';
-                    tr.innerHTML = `
-                        <td>${row[0] || ''}</td>
-                        <td>${row[1] || ''}</td>
-                        <td>${row[2] || ''}</td>
-                        <td>${row[3] || ''}</td>
-                        <td>${row[4] || ''}</td>
-                        <td>${row[5] || ''}</td>
-                        <td>${row[6] || ''}</td>
-                    `;
+                    for (let j = 0; j < numColumns; j++) {
+                        const td = document.createElement('td');
+                        td.className = 'fw-bold text-center';
+                        td.textContent = row[j] || '';
+                        tr.appendChild(td);
+                    }
                 }
-                // Check if this is a Tasks header
-                else if (row[0] === 'Tasks') {
+                // Check if this is a "Tasks" header row
+                else if (row.some(cell => cell === 'Tasks')) {
                     tr.className = 'table-info fw-bold';
-                    tr.innerHTML = `
-                        <td>${row[0] || ''}</td>
-                        <td>${row[1] || ''}</td>
-                        <td>${row[2] || ''}</td>
-                        <td>${row[3] || ''}</td>
-                        <td>${row[4] || ''}</td>
-                        <td>${row[5] || ''}</td>
-                        <td>${row[6] || ''}</td>
-                    `;
+                    for (let j = 0; j < numColumns; j++) {
+                        const td = document.createElement('td');
+                        td.className = 'fw-bold text-center';
+                        td.textContent = row[j] || '';
+                        tr.appendChild(td);
+                    }
                 }
                 // Regular data rows
                 else {
-                    tr.innerHTML = `
-                        <td class="text-truncate" style="max-width: 150px;" title="${row[0] || ''}">${row[0] || ''}</td>
-                        <td class="text-truncate" style="max-width: 100px;" title="${row[1] || ''}">${row[1] || ''}</td>
-                        <td class="text-truncate" style="max-width: 150px;" title="${row[2] || ''}">${row[2] || ''}</td>
-                        <td class="text-truncate" style="max-width: 100px;" title="${row[3] || ''}">${row[3] || ''}</td>
-                        <td class="text-truncate" style="max-width: 150px;" title="${row[4] || ''}">${row[4] || ''}</td>
-                        <td class="text-truncate" style="max-width: 100px;" title="${row[5] || ''}">${row[5] || ''}</td>
-                        <td class="text-truncate" style="max-width: 150px;" title="${row[6] || ''}">${row[6] || ''}</td>
-                    `;
+                    for (let j = 0; j < numColumns; j++) {
+                        const td = document.createElement('td');
+                        const cellValue = row[j] || '';
+                        
+                        // Check if this is a status column (every odd column after team resources)
+                        const isStatusColumn = j % 2 === 1 && i > 2; // Assuming status is in odd columns
+                        const isTaskRow = i > 0 && previewData[i-1] && previewData[i-1].some(cell => cell === 'Tasks');
+                        
+                        if (isStatusColumn && isTaskRow && cellValue) {
+                            // Render status as badge
+                            td.innerHTML = `<span class="badge bg-${getStatusBadgeColor(cellValue)}">${cellValue}</span>`;
+                        } else {
+                            // Regular cell with truncation
+                            td.className = 'text-truncate';
+                            td.style.maxWidth = '200px';
+                            td.title = cellValue;
+                            td.textContent = cellValue;
+                        }
+                        
+                        tr.appendChild(td);
+                    }
                 }
                 tbody.appendChild(tr);
             }
 
             document.getElementById('previewRowsCount').textContent = `${previewData.length} rows`;
             console.log('Preview table rendered with', previewData.length, 'rows');
+        }
+        
+        // Helper function to get badge color for task status
+        function getStatusBadgeColor(status) {
+            if (!status) return 'secondary';
+            const statusLower = status.toLowerCase();
+            if (statusLower.includes('done') || statusLower.includes('closed')) return 'success';
+            if (statusLower.includes('progress') || statusLower.includes('dev')) return 'primary';
+            if (statusLower.includes('review') || statusLower.includes('testing')) return 'warning';
+            if (statusLower.includes('todo') || statusLower.includes('open')) return 'info';
+            if (statusLower.includes('blocked') || statusLower.includes('error')) return 'danger';
+            return 'secondary';
         }
 
         // Render status chart
